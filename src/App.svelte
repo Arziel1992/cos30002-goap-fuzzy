@@ -3,8 +3,7 @@
   import Canvas from './lib/Canvas.svelte';
   import Controls from './lib/Controls.svelte';
   import Glossary from './lib/Glossary.svelte';
-  import { BehaviourTree, UtilityEngine, NodeStatus } from './lib/Simulation.js';
-  import { onMount, tick } from 'svelte';
+  import { BehaviourTree, UtilityEngine } from './lib/Simulation.js';
 
   let bt = new BehaviourTree();
   let utility = new UtilityEngine();
@@ -33,9 +32,10 @@
     binaryWinner: null
   });
 
-  let sidebarWidth = $state(400);
-  let isResizing = $state(false);
   let containerRef = $state();
+
+  let leftOpen = $state(true);
+  let rightOpen = $state(true);
 
   let glossaryOpen = $state(false);
   let glossarySection = $state('root');
@@ -46,16 +46,13 @@
   }
 
   function tickAI() {
-    // 1. Run Binary/Fuzzy Tick on the Tree
     bt.tick(bt.root, params, params.mode);
     stats.btRoot = { ...bt.root };
     stats.lastDecision = bt.root.status;
 
-    // 2. Derive scores for the summary panel
     let rawScores = utility.calculateScores(params);
     const winningBranch = bt.root.children.find(c => c.status === 'SUCCESS' || c.status === 'RUNNING');
-    
-    // When in binary mode, outcomes are 1 or 0
+
     if (params.mode === 'binary') {
        stats.utilityScores = rawScores.map(s => ({
           ...s,
@@ -73,118 +70,117 @@
     stats.btRoot = bt.root;
     stats.lastDecision = 'Reset Complete';
   }
-
-  onMount(() => {
-    const handleGlobalResize = (e) => {
-        if (!isResizing) return;
-        const newWidth = Math.max(300, Math.min(e.clientX, window.innerWidth * 0.25));
-        sidebarWidth = newWidth;
-    };
-    const stopResizing = () => { isResizing = false; };
-
-    window.addEventListener('mousemove', handleGlobalResize);
-    window.addEventListener('mouseup', stopResizing);
-
-    return () => {
-      window.removeEventListener('mousemove', handleGlobalResize);
-      window.removeEventListener('mouseup', stopResizing);
-    };
-  });
 </script>
 
-<main class="app-layout" class:resizing={isResizing}>
-  <aside class="sidebar-container" style="width: {sidebarWidth}px">
+<main class="app-layout">
+  {#if leftOpen}
+  <aside class="sidebar-left">
     <div class="sidebar-inner">
       <Sidebar />
-      <hr />
-      <Controls 
-        bind:params 
-        onTick={tickAI}
-        onReset={resetTrees}
-        onGlossary={openGlossary}
-      />
     </div>
     <div class="app-footer">
       Made with ❤️ for Swinburne — COS30002 Artificial Intelligence for Games
     </div>
-    <button class="resizer" onmousedown={() => isResizing = true} aria-label="Resize Sidebar"></button>
   </aside>
-  
-  <section class="canvas-panel" bind:this={containerRef}>
-    <Canvas {stats} {params} {physics} {containerRef} />
-    
-    <!-- Physics Control (Left) -->
-    <div class="floating-top-left">
-       <div class="physics-card">
-          <div class="card-header">
-             <span class="label">Physics Engine</span>
-          </div>
-          <div class="physics-grid">
-             <div class="p-row">
-                <label for="repulsion">Repulsion</label>
-                <input id="repulsion" type="range" min="500" max="4000" step="100" bind:value={physics.repulsion} />
-             </div>
-             <div class="p-row">
-                <label for="linkDist">Link Dist</label>
-                <input id="linkDist" type="range" min="50" max="400" step="10" bind:value={physics.linkDist} />
-             </div>
-             <div class="p-row">
-                <label for="gravity">Gravity</label>
-                <input id="gravity" type="range" min="0" max="1" step="0.05" bind:value={physics.gravity} />
-             </div>
-             <hr class="mini-divider" />
-             <div class="p-toggle">
-                <span class="label">Movement: <b>{physics.drift ? 'DRIFT' : 'FIXED'}</b></span>
-                <button class="toggle-btn" class:active={physics.drift} onclick={() => physics.drift = !physics.drift}>
-                   {physics.drift ? 'Unbound' : 'Hierarchical'}
-                </button>
-             </div>
-          </div>
-       </div>
-    </div>
+  {/if}
 
-    <!-- Decision Context (Right) -->
-    <div class="floating-top-right">
-       <div class="decision-card">
-          <div class="card-header">
-            <span class="label">Decision Context</span>
-            <button class="mini-tick-btn" onclick={tickAI} title="Execute Step">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 3l14 9-14 9V3z"/></svg>
-              TICK
+  <section class="canvas-panel" bind:this={containerRef}>
+    <button class="toggle-btn toggle-left" onclick={() => leftOpen = !leftOpen} aria-label="Toggle left sidebar">
+      {leftOpen ? '◀' : '▶'}
+    </button>
+    <button class="toggle-btn toggle-right" onclick={() => rightOpen = !rightOpen} aria-label="Toggle right sidebar">
+      {rightOpen ? '▶' : '◀'}
+    </button>
+
+    <Canvas {stats} {params} {physics} {containerRef} />
+  </section>
+
+  {#if rightOpen}
+  <aside class="sidebar-right">
+    <div class="sidebar-inner">
+      <Controls
+        bind:params
+        onTick={tickAI}
+        onReset={resetTrees}
+        onGlossary={openGlossary}
+      />
+
+      <hr />
+
+      <!-- Physics Engine -->
+      <div class="panel-section">
+        <div class="panel-header">
+          <span class="panel-label">Physics Engine</span>
+        </div>
+        <div class="panel-body">
+          <div class="p-row">
+            <label for="repulsion">Repulsion</label>
+            <input id="repulsion" type="range" min="500" max="4000" step="100" bind:value={physics.repulsion} />
+          </div>
+          <div class="p-row">
+            <label for="linkDist">Link Dist</label>
+            <input id="linkDist" type="range" min="50" max="400" step="10" bind:value={physics.linkDist} />
+          </div>
+          <div class="p-row">
+            <label for="gravity">Gravity</label>
+            <input id="gravity" type="range" min="0" max="1" step="0.05" bind:value={physics.gravity} />
+          </div>
+          <hr class="mini-divider" />
+          <div class="p-toggle">
+            <span class="toggle-label">Movement: <b>{physics.drift ? 'DRIFT' : 'FIXED'}</b></span>
+            <button class="drift-btn" class:active={physics.drift} onclick={() => physics.drift = !physics.drift}>
+              {physics.drift ? 'Unbound' : 'Hierarchical'}
             </button>
           </div>
-          
-          <div class="score-comparison">
-             <div class="mode-score full-scores">
-                <span class="score-label">Fuzzy Strategy Utilities:</span>
-                {#each stats.utilityScores as s}
-                  <div class="u-row">
-                    <span class="u-name">{s.label}</span>
-                    <div class="u-meter-bg">
-                      <div class="u-meter-fill" style="width: {s.score * 100}%"></div>
-                    </div>
-                    <span class="u-val">{s.score.toFixed(3)}</span>
-                  </div>
-                {/each}
-             </div>
-          </div>
+        </div>
+      </div>
 
-          <hr class="mini-divider" />
-          
-          <div class="root-info">
-             <div class="info-row">
-                <span class="label">{params.mode === 'fuzzy' ? 'Fuzzy Pick:' : 'Binary Pick:'}</span>
-                <span class="value binary">{stats.binaryWinner || '...'}</span>
-             </div>
-             <div class="info-row">
-                <span class="label">Step Status:</span>
-                <span class="value" class:success={stats.lastDecision === 'SUCCESS'} class:failure={stats.lastDecision === 'FAILURE'}>{stats.lastDecision}</span>
-             </div>
+      <hr />
+
+      <!-- Decision Context -->
+      <div class="panel-section">
+        <div class="panel-header">
+          <span class="panel-label">Decision Context</span>
+          <button class="mini-tick-btn" onclick={tickAI} title="Execute Step">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 3l14 9-14 9V3z"/></svg>
+            TICK
+          </button>
+        </div>
+
+        <div class="score-comparison">
+          <div class="mode-score full-scores">
+            <span class="score-label">Fuzzy Strategy Utilities:</span>
+            {#each stats.utilityScores as s}
+              <div class="u-row">
+                <span class="u-name">{s.label}</span>
+                <div class="u-meter-bg">
+                  <div class="u-meter-fill" style="width: {s.score * 100}%"></div>
+                </div>
+                <span class="u-val">{s.score.toFixed(3)}</span>
+              </div>
+            {/each}
           </div>
-       </div>
+        </div>
+
+        <hr class="mini-divider" />
+
+        <div class="root-info">
+          <div class="info-row">
+            <span class="info-label">{params.mode === 'fuzzy' ? 'Fuzzy Pick:' : 'Binary Pick:'}</span>
+            <span class="info-value binary">{stats.binaryWinner || '...'}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Step Status:</span>
+            <span class="info-value" class:success={stats.lastDecision === 'SUCCESS'} class:failure={stats.lastDecision === 'FAILURE'}>{stats.lastDecision}</span>
+          </div>
+        </div>
+      </div>
     </div>
-
-  </section>
+    <div class="app-footer">
+      &copy; E. Ketterer Ortiz
+    </div>
+  </aside>
+  {/if}
 
   <Glossary bind:isOpen={glossaryOpen} bind:section={glossarySection} />
 </main>
@@ -198,7 +194,7 @@
     --accent: #2563eb;
     --panel-border: #e2e8f0;
     --glass-bg: rgba(255, 255, 255, 0.85);
-    
+
     --bt-ready: #94a3b8;
     --bt-evaluating: #eab308;
     --bt-success: #22c55e;
@@ -213,57 +209,71 @@
   }
 
   .app-layout { display: flex; height: 100vh; width: 100vw; overflow: hidden; }
-  .app-layout.resizing { cursor: col-resize; user-select: none; }
 
-  .sidebar-container {
-    background-color: var(--bg-secondary); border-right: 1px solid var(--panel-border);
-    display: flex; flex-direction: column; position: relative;
-    box-shadow: 1px 0 10px rgba(0,0,0,0.05); z-index: 100; flex-shrink: 0;
+  .sidebar-left, .sidebar-right {
+    width: 25%; flex-shrink: 0;
+    background-color: var(--bg-secondary);
+    display: flex; flex-direction: column;
+    z-index: 100; overflow: hidden;
+  }
+
+  .sidebar-left {
+    border-right: 1px solid var(--panel-border);
+    box-shadow: 1px 0 10px rgba(0,0,0,0.05);
+  }
+
+  .sidebar-right {
+    border-left: 1px solid var(--panel-border);
+    box-shadow: -1px 0 10px rgba(0,0,0,0.05);
   }
 
   .sidebar-inner { flex: 1; overflow-y: auto; padding: 1.5rem; }
-
-  .resizer {
-    position: absolute; right: -3px; top: 0;
-    width: 6px; height: 100%; cursor: col-resize;
-    background: transparent; border: none; z-index: 110;
-  }
-  .resizer:hover, .app-layout.resizing .resizer { background: var(--accent); }
 
   .app-footer {
     padding: 1rem; font-size: 0.7rem; color: var(--text-secondary);
     text-align: center; border-top: 1px solid var(--panel-border); background: var(--bg-primary);
   }
 
-  .canvas-panel { flex: 1; position: relative; background-color: #f1f5f9; overflow: hidden; }
-  
-  .floating-top-left { position: absolute; top: 1.5rem; left: 1.5rem; pointer-events: none; z-index: 200; }
-  .floating-top-right { position: absolute; top: 1.5rem; right: 1.5rem; pointer-events: none; z-index: 200; }
+  .canvas-panel { flex: 1; position: relative; background-color: #f1f5f9; overflow: hidden; min-width: 0; }
 
-
-  .physics-card, .decision-card {
-    background: var(--glass-bg); backdrop-filter: blur(12px);
-    border: 1px solid var(--panel-border); border-radius: 16px;
-    padding: 1.2rem; box-shadow: 0 20px 50px rgba(0,0,0,0.1);
-    pointer-events: auto; cursor: default;
+  /* Toggle buttons */
+  .toggle-btn {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    z-index: 200; width: 28px; height: 56px;
+    background: var(--glass-bg); backdrop-filter: blur(8px);
+    border: 1px solid var(--panel-border); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.75rem; color: var(--text-secondary);
+    transition: background 0.2s, color 0.2s;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
   }
-  .decision-card { min-width: 280px; display: flex; flex-direction: column; gap: 0.6rem; }
-  .physics-card { min-width: 180px; display: flex; flex-direction: column; gap: 0.6rem; }
+  .toggle-btn:hover { background: var(--accent); color: white; }
+  .toggle-left { left: 0; border-radius: 0 8px 8px 0; border-left: none; }
+  .toggle-right { right: 0; border-radius: 8px 0 0 8px; border-right: none; }
 
-  .card-header .label { font-size: 0.7rem; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+  /* Right sidebar panel sections */
+  .panel-section { margin: 0.5rem 0; }
+  .panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 0.8rem;
+  }
+  .panel-label {
+    font-size: 0.7rem; font-weight: 800; color: var(--text-secondary);
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .panel-body { display: flex; flex-direction: column; gap: 0.8rem; }
 
-  .physics-grid { display: flex; flex-direction: column; gap: 0.8rem; margin-top: 0.4rem; }
   .p-row { display: flex; flex-direction: column; gap: 0.2rem; }
   .p-row label { font-size: 0.6rem; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; opacity: 0.7; }
   .p-row input { width: 100%; cursor: pointer; height: 4px; accent-color: var(--accent); }
 
   .p-toggle { display: flex; flex-direction: column; gap: 0.5rem; }
-  .p-toggle .label { font-size: 0.65rem; color: var(--text-secondary); }
-  .toggle-btn { 
-    background: #e2e8f0; border: none; border-radius: 8px; padding: 0.4rem; 
+  .toggle-label { font-size: 0.65rem; color: var(--text-secondary); }
+  .drift-btn {
+    background: #e2e8f0; border: none; border-radius: 8px; padding: 0.4rem;
     font-size: 0.7rem; font-weight: 800; cursor: pointer; transition: all 0.2s;
   }
-  .toggle-btn.active { background: var(--accent); color: white; }
+  .drift-btn.active { background: var(--accent); color: white; }
 
   .mini-tick-btn {
     background: var(--accent); color: white; border: none; border-radius: 8px;
@@ -282,16 +292,16 @@
   .u-val { min-width: 35px; font-variant-numeric: tabular-nums; color: var(--accent); }
 
   .score-label { font-size: 0.65rem; color: var(--text-secondary); font-weight: 700; opacity: 0.8; text-transform: uppercase; margin-bottom: 0.2rem; }
-  
+
   .mini-divider { border: 0; border-top: 1px solid var(--panel-border); margin: 0.8rem 0; opacity: 0.5; }
-  
+
   .root-info { display: flex; flex-direction: column; gap: 0.6rem; }
   .info-row { display: flex; flex-direction: column; gap: 0.1rem; }
-  .info-row .label { font-size: 0.6rem; color: var(--text-secondary); opacity: 0.9; }
-  .info-row .value { font-size: 1.1rem; font-weight: 900; }
-  .value.binary { color: #1e293b; letter-spacing: -0.01em; }
-  .value.success { color: var(--bt-success); }
-  .value.failure { color: var(--bt-failure); }
+  .info-row .info-label { font-size: 0.6rem; color: var(--text-secondary); opacity: 0.9; }
+  .info-row .info-value { font-size: 1.1rem; font-weight: 900; }
+  .info-value.binary { color: #1e293b; letter-spacing: -0.01em; }
+  .info-value.success { color: var(--bt-success); }
+  .info-value.failure { color: var(--bt-failure); }
 
   hr { border: 0; border-top: 1px solid var(--panel-border); margin: 1.5rem 0; }
 </style>

@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2026-03-31 - 23:59] - Copyright Footer
+
+### Added
+
+- Copyright footer (© E. Ketterer Ortiz) to the right sidebar in all three projects.
+
+## [2026-03-31 - 23:47] - Dual Sidebar Layout
+
+### Changed
+
+- Replaced resizable single sidebar with static dual-sidebar layout (25% left / 50% canvas / 25% right).
+- Moved Controls, Physics Engine, and Decision Context panels from left sidebar and floating overlays into the right sidebar.
+- Left sidebar now contains only educational content.
+- Added toggle buttons on canvas edges to show/hide each sidebar.
+- Removed drag-resize functionality.
+
 ## [2026-03-31 - 15:53] - Repulsion Slider & Scoped Group Physics
 
 ### Changed
