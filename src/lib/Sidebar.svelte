@@ -12,7 +12,10 @@
     
     <h3 id="goap">GOAP: Goal-Oriented Action Planning</h3>
     <p>
-      GOAP decouples actions from goals. The AI doesn't have a fixed "Attack State"; it has a goal (<code>TargetDead</code>) and a list of atomic actions (<code>Shoot</code>, <code>Reload</code>, <code>Walk</code>). It uses <strong>Regressive A* Search</strong> to find the lowest-cost path from the Goal back to the current state.
+      Unlike <strong>Behaviour Trees (BTs)</strong>, which are a fixed hierarchy of selectors and sequences, GOAP is a <strong>Plan Generator</strong>. It decouples actions from goals. The AI doesn't have a hardcoded "Attack Branch"; it has a goal (<code>TargetDead</code>) and a list of atomic actions.
+    </p>
+    <p>
+        During reasoning, it uses <strong>Regressive A* Search</strong> to dynamically build a "Plan Chain" from the Goal back to the current state. This allows for emergent problem solving that standard BTs cannot easily replicate.
     </p>
 
     <h3 id="utility">Utility & Fuzzy Logic</h3>
@@ -90,6 +93,4 @@
 
   .game-cases p { margin: 0; font-size: 0.82rem; line-height: 1.4; }
 
-  ul { padding-left: 1.2rem; margin: 1rem 0; }
-  li { margin-bottom: 0.6rem; font-size: 0.9rem; }
 </style>

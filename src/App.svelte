@@ -19,10 +19,37 @@
     goal: 'enemyDead'
   });
 
-  let stats = $state({
-    currentPlan: [],
-    utilityScores: [],
-    lastDecision: ''
+  let stats = $derived.by(() => {
+    if (params.mode === 'goap') {
+      const currentState = {
+        hasAmmo: params.ammo > 0,
+        hasAmmoReserve: false,
+        nearEnemy: params.distEnemy < 10,
+        nearHealth: params.distHealth < 10,
+        nearAmmo: params.distAmmo < 10,
+        enemyDead: false,
+        fullHealth: params.health >= 100
+      };
+      const goals = { 
+        enemyDead: { enemyDead: true },
+        fullHealth: { fullHealth: true }
+      };
+      const result = planner.plan(goals[params.goal], currentState);
+      return {
+        currentPlan: result.path,
+        allNodes: result.allNodes,
+        utilityScores: [],
+        lastDecision: result.path?.[0]?.name || 'Idle'
+      };
+    } else {
+      const scores = utility.calculate(params);
+      return {
+        currentPlan: [],
+        allNodes: [],
+        utilityScores: scores,
+        lastDecision: scores[0]?.label || 'Idle'
+      };
+    }
   });
 
   let sidebarWidth = $state(400);
@@ -36,32 +63,6 @@
     glossarySection = section;
     glossaryOpen = true;
   }
-
-  function updateLogic() {
-    if (params.mode === 'goap') {
-      const currentState = {
-        hasAmmo: params.ammo > 0,
-        nearEnemy: params.distEnemy < 10,
-        nearHealth: params.distHealth < 10,
-        nearAmmo: params.distAmmo < 10,
-        enemyDead: false,
-        fullHealth: params.health >= 100
-      };
-      const goals = { 
-        enemyDead: { enemyDead: true },
-        fullHealth: { fullHealth: true }
-      };
-      stats.currentPlan = planner.plan(goals[params.goal], currentState);
-      stats.lastDecision = stats.currentPlan?.[0]?.name || 'Idle';
-    } else {
-      stats.utilityScores = utility.calculate(params);
-      stats.lastDecision = stats.utilityScores[0].label;
-    }
-  }
-
-  $effect(() => {
-    updateLogic();
-  });
 
   onMount(() => {
     const handleGlobalResize = (e) => {
