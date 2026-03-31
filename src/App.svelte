@@ -10,19 +10,27 @@
   let utility = new UtilityEngine();
 
   let params = $state({
-    mode: 'bt', // 'bt', 'utility'
+    mode: 'binary', // 'binary' or 'fuzzy'
     health: 80,
-    ammo: 10,
+    ammo: 20,
     distEnemy: 50,
     distHealth: 70,
     distAmmo: 30,
-    goal: 'default'
+    goal: 'patrol'
+  });
+
+  let physics = $state({
+    repulsion: -2500,
+    linkDist: 140,
+    drift: false,
+    gravity: 0.1
   });
 
   let stats = $state({
     btRoot: bt.root,
-    lastDecision: 'Waiting for Tick...',
-    utilityScores: []
+    lastDecision: 'READY',
+    utilityScores: [],
+    binaryWinner: null
   });
 
   let sidebarWidth = $state(400);
@@ -38,15 +46,26 @@
   }
 
   function tickAI() {
-    if (params.mode === 'bt') {
-      bt.tick(bt.root, params);
-      // Trigger Svelte state update (since bt.root is mutated internally)
-      stats.btRoot = { ...bt.root };
-      stats.lastDecision = bt.root.status;
+    // 1. Run Binary/Fuzzy Tick on the Tree
+    bt.tick(bt.root, params, params.mode);
+    stats.btRoot = { ...bt.root };
+    stats.lastDecision = bt.root.status;
+
+    // 2. Derive scores for the summary panel
+    let rawScores = utility.calculateScores(params);
+    const winningBranch = bt.root.children.find(c => c.status === 'SUCCESS' || c.status === 'RUNNING');
+    
+    // When in binary mode, outcomes are 1 or 0
+    if (params.mode === 'binary') {
+       stats.utilityScores = rawScores.map(s => ({
+          ...s,
+          score: winningBranch && winningBranch.id.includes(s.id.split('-')[0]) ? 1 : 0
+       }));
     } else {
-      stats.utilityScores = utility.calculate(params);
-      stats.lastDecision = stats.utilityScores[0].label;
+       stats.utilityScores = rawScores;
     }
+
+    stats.binaryWinner = winningBranch ? winningBranch.name : 'Searching...';
   }
 
   function resetTrees() {
@@ -92,18 +111,76 @@
   </aside>
   
   <section class="canvas-panel" bind:this={containerRef}>
-    <Canvas {stats} {params} {containerRef} />
+    <Canvas {stats} {params} {physics} {containerRef} />
     
+    <!-- Physics Control (Left) -->
+    <div class="floating-top-left">
+       <div class="physics-card">
+          <div class="card-header">
+             <span class="label">Physics Engine</span>
+          </div>
+          <div class="physics-grid">
+             <div class="p-row">
+                <label for="repulsion">Repulsion</label>
+                <input id="repulsion" type="range" min="-4000" max="-500" step="100" bind:value={physics.repulsion} />
+             </div>
+             <div class="p-row">
+                <label for="linkDist">Link Dist</label>
+                <input id="linkDist" type="range" min="50" max="400" step="10" bind:value={physics.linkDist} />
+             </div>
+             <div class="p-row">
+                <label for="gravity">Gravity</label>
+                <input id="gravity" type="range" min="0" max="1" step="0.05" bind:value={physics.gravity} />
+             </div>
+             <hr class="mini-divider" />
+             <div class="p-toggle">
+                <span class="label">Movement: <b>{physics.drift ? 'DRIFT' : 'FIXED'}</b></span>
+                <button class="toggle-btn" class:active={physics.drift} onclick={() => physics.drift = !physics.drift}>
+                   {physics.drift ? 'Unbound' : 'Hierarchical'}
+                </button>
+             </div>
+          </div>
+       </div>
+    </div>
+
+    <!-- Decision Context (Right) -->
     <div class="floating-top-right">
        <div class="decision-card">
           <div class="card-header">
-            <span class="label">Root Execution Status</span>
-            <button class="mini-tick-btn" onclick={tickAI} title="Tick (Execute Single Step)">
+            <span class="label">Decision Context</span>
+            <button class="mini-tick-btn" onclick={tickAI} title="Execute Step">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 3l14 9-14 9V3z"/></svg>
               TICK
             </button>
           </div>
-          <span class="value" class:success={stats.lastDecision === 'SUCCESS'} class:failure={stats.lastDecision === 'FAILURE'}>{stats.lastDecision}</span>
+          
+          <div class="score-comparison">
+             <div class="mode-score full-scores">
+                <span class="score-label">Fuzzy Strategy Utilities:</span>
+                {#each stats.utilityScores as s}
+                  <div class="u-row">
+                    <span class="u-name">{s.label}</span>
+                    <div class="u-meter-bg">
+                      <div class="u-meter-fill" style="width: {s.score * 100}%"></div>
+                    </div>
+                    <span class="u-val">{s.score.toFixed(3)}</span>
+                  </div>
+                {/each}
+             </div>
+          </div>
+
+          <hr class="mini-divider" />
+          
+          <div class="root-info">
+             <div class="info-row">
+                <span class="label">Binary Pick:</span>
+                <span class="value binary">{stats.binaryWinner || '...'}</span>
+             </div>
+             <div class="info-row">
+                <span class="label">Step Status:</span>
+                <span class="value" class:success={stats.lastDecision === 'SUCCESS'} class:failure={stats.lastDecision === 'FAILURE'}>{stats.lastDecision}</span>
+             </div>
+          </div>
        </div>
     </div>
 
@@ -164,19 +241,34 @@
   }
 
   .canvas-panel { flex: 1; position: relative; background-color: #f1f5f9; overflow: hidden; }
-
+  
+  .floating-top-left { position: absolute; top: 1.5rem; left: 1.5rem; pointer-events: none; z-index: 200; }
   .floating-top-right { position: absolute; top: 1.5rem; right: 1.5rem; pointer-events: none; z-index: 200; }
   .floating-bottom-right { position: absolute; bottom: 1.5rem; right: 1.5rem; pointer-events: none; z-index: 200; }
 
-  .decision-card {
+  .physics-card, .decision-card {
     background: var(--glass-bg); backdrop-filter: blur(12px);
     border: 1px solid var(--panel-border); border-radius: 16px;
-    padding: 1.5rem; box-shadow: 0 20px 50px rgba(0,0,0,0.1);
-    min-width: 280px; display: flex; flex-direction: column; gap: 0.6rem;
+    padding: 1.2rem; box-shadow: 0 20px 50px rgba(0,0,0,0.1);
     pointer-events: auto; cursor: default;
   }
+  .decision-card { min-width: 280px; display: flex; flex-direction: column; gap: 0.6rem; }
+  .physics-card { min-width: 180px; display: flex; flex-direction: column; gap: 0.6rem; }
 
-  .card-header { display: flex; justify-content: space-between; align-items: center; }
+  .card-header .label { font-size: 0.7rem; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+
+  .physics-grid { display: flex; flex-direction: column; gap: 0.8rem; margin-top: 0.4rem; }
+  .p-row { display: flex; flex-direction: column; gap: 0.2rem; }
+  .p-row label { font-size: 0.6rem; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; opacity: 0.7; }
+  .p-row input { width: 100%; cursor: pointer; height: 4px; accent-color: var(--accent); }
+
+  .p-toggle { display: flex; flex-direction: column; gap: 0.5rem; }
+  .p-toggle .label { font-size: 0.65rem; color: var(--text-secondary); }
+  .toggle-btn { 
+    background: #e2e8f0; border: none; border-radius: 8px; padding: 0.4rem; 
+    font-size: 0.7rem; font-weight: 800; cursor: pointer; transition: all 0.2s;
+  }
+  .toggle-btn.active { background: var(--accent); color: white; }
 
   .mini-tick-btn {
     background: var(--accent); color: white; border: none; border-radius: 8px;
@@ -186,19 +278,25 @@
   .mini-tick-btn:hover { background: #1d4ed8; transform: translateY(-1px); }
   .mini-tick-btn:active { transform: translateY(0); }
 
-  .decision-card .label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-secondary); font-weight: 700; }
-  .decision-card .value { font-size: 1.4rem; font-weight: 900; color: var(--accent); letter-spacing: -0.02em; }
+  .score-comparison { display: flex; flex-direction: column; gap: 0.8rem; margin: 0.5rem 0; }
+  .full-scores { display: flex; flex-direction: column; gap: 0.4rem; }
+  .u-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; font-weight: 700; color: #1e293b; }
+  .u-name { flex: 1; opacity: 0.8; }
+  .u-meter-bg { flex: 2; height: 6px; background: #e2e8f0; border-radius: 99px; overflow: hidden; }
+  .u-meter-fill { height: 100%; background: var(--accent); transition: width 0.3s; }
+  .u-val { min-width: 35px; font-variant-numeric: tabular-nums; color: var(--accent); }
 
+  .score-label { font-size: 0.65rem; color: var(--text-secondary); font-weight: 700; opacity: 0.8; text-transform: uppercase; margin-bottom: 0.2rem; }
+  
+  .mini-divider { border: 0; border-top: 1px solid var(--panel-border); margin: 0.8rem 0; opacity: 0.5; }
+  
+  .root-info { display: flex; flex-direction: column; gap: 0.6rem; }
+  .info-row { display: flex; flex-direction: column; gap: 0.1rem; }
+  .info-row .label { font-size: 0.6rem; color: var(--text-secondary); opacity: 0.9; }
+  .info-row .value { font-size: 1.1rem; font-weight: 900; }
+  .value.binary { color: #1e293b; letter-spacing: -0.01em; }
   .value.success { color: var(--bt-success); }
   .value.failure { color: var(--bt-failure); }
-
-  .kb-hint {
-    background: var(--glass-bg); backdrop-filter: blur(4px);
-    padding: 0.6rem 1.2rem; border-radius: 99px;
-    font-size: 0.75rem; color: var(--text-secondary);
-    border: 1px solid var(--panel-border); box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-    pointer-events: auto; cursor: default;
-  }
 
   hr { border: 0; border-top: 1px solid var(--panel-border); margin: 1.5rem 0; }
 </style>

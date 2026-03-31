@@ -7,13 +7,14 @@
   } = $props();
 
   const modes = [
-    { id: 'bt', label: 'Mode A: GOAP-Style BT', tooltip: 'Hierarchical Control Flow. Evaluates Selectors and Sequences to choose a single atomic action.' },
-    { id: 'utility', label: 'Mode B: Utility (Fuzzy Logic)', tooltip: 'State evaluation using non-linear math. All actions compete simultaneously.' }
+    { id: 'binary', label: 'Evaluation: Binary', tooltip: 'Traditional priority-based execution. Branches are evaluated in a fixed order.' },
+    { id: 'fuzzy', label: 'Evaluation: Fuzzy', tooltip: 'Utility-based execution. Selector children are re-prioritized based on real-time scores.' }
   ];
 
   const goals = [
-    { id: 'default', label: 'Default Survival' },
-    { id: 'siege', label: 'Siege Territory' }
+    { id: 'patrol', label: 'Patrol Territory' },
+    { id: 'defense', label: 'Defensive Stand' },
+    { id: 'siege', label: 'Offensive Siege' }
   ];
 </script>
 
