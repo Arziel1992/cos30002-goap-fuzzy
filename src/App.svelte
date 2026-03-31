@@ -16,7 +16,7 @@
     distEnemy: 50,
     distHealth: 70,
     distAmmo: 30,
-    goal: 'enemyDead'
+    goal: 'default'
   });
 
   let stats = $state({
@@ -96,7 +96,13 @@
     
     <div class="floating-top-right">
        <div class="decision-card">
-          <span class="label">Root Execution Status</span>
+          <div class="card-header">
+            <span class="label">Root Execution Status</span>
+            <button class="mini-tick-btn" onclick={tickAI} title="Tick (Execute Single Step)">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 3l14 9-14 9V3z"/></svg>
+              TICK
+            </button>
+          </div>
           <span class="value" class:success={stats.lastDecision === 'SUCCESS'} class:failure={stats.lastDecision === 'FAILURE'}>{stats.lastDecision}</span>
        </div>
     </div>
@@ -163,15 +169,25 @@
   .floating-bottom-right { position: absolute; bottom: 1.5rem; right: 1.5rem; pointer-events: none; z-index: 200; }
 
   .decision-card {
-    background: var(--glass-bg); backdrop-filter: blur(8px);
-    border: 1px solid var(--panel-border); border-radius: 12px;
-    padding: 1.2rem; box-shadow: 0 10px 40px rgba(0,0,0,0.05);
-    min-width: 250px; display: flex; flex-direction: column; gap: 0.4rem;
+    background: var(--glass-bg); backdrop-filter: blur(12px);
+    border: 1px solid var(--panel-border); border-radius: 16px;
+    padding: 1.5rem; box-shadow: 0 20px 50px rgba(0,0,0,0.1);
+    min-width: 280px; display: flex; flex-direction: column; gap: 0.6rem;
     pointer-events: auto; cursor: default;
   }
 
+  .card-header { display: flex; justify-content: space-between; align-items: center; }
+
+  .mini-tick-btn {
+    background: var(--accent); color: white; border: none; border-radius: 8px;
+    padding: 0.4rem 0.8rem; font-size: 0.65rem; font-weight: 800; cursor: pointer;
+    display: flex; align-items: center; gap: 0.4rem; transition: transform 0.1s, background 0.2s;
+  }
+  .mini-tick-btn:hover { background: #1d4ed8; transform: translateY(-1px); }
+  .mini-tick-btn:active { transform: translateY(0); }
+
   .decision-card .label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-secondary); font-weight: 700; }
-  .decision-card .value { font-size: 1.3rem; font-weight: 800; color: var(--accent); }
+  .decision-card .value { font-size: 1.4rem; font-weight: 900; color: var(--accent); letter-spacing: -0.02em; }
 
   .value.success { color: var(--bt-success); }
   .value.failure { color: var(--bt-failure); }
