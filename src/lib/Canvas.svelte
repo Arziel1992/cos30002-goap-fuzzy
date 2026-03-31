@@ -42,7 +42,7 @@
         data: d.data,
         depth: d.depth,
         x: existing?.x || (Math.random() - 0.5) * 200,
-        y: existing?.y || d.depth * 180
+        y: existing?.y || d.depth * 200
       };
     });
 
@@ -58,11 +58,13 @@
 
     simulation = d3.forceSimulation(forceNodes)
       .force('link', d3.forceLink(forceLinks).distance(physics.linkDist).strength(1))
-      .force('charge', d3.forceManyBody().strength(physics.repulsion)) 
+      .force('charge', d3.forceManyBody().strength(physics.repulsion))
+      .force('collide', d3.forceCollide(90))
       .force('x', d3.forceX(0).strength(physics.gravity))
-      .force('y', d3.forceY(d => d.depth * 180).strength(physics.drift ? 0.05 : 2)) 
+      .force('y', d3.forceY(d => d.depth * 200).strength(physics.drift ? 0.05 : 2))
       .on('tick', () => {
-         nodes = [...forceNodes]; 
+         nodes = [...forceNodes];
+         links = [...forceLinks];
       });
 
     simulation.alpha(1).restart();
@@ -74,7 +76,7 @@
      simulation.force('charge').strength(physics.repulsion);
      simulation.force('link').distance(physics.linkDist);
      simulation.force('x').strength(physics.gravity);
-     simulation.force('y').strength(physics.drift ? 0.05 : 2);
+     simulation.force('y', d3.forceY(d => d.depth * 200).strength(physics.drift ? 0.05 : 2));
      simulation.alpha(0.3).restart();
   });
 

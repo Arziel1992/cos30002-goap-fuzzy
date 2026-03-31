@@ -20,8 +20,8 @@
   });
 
   let physics = $state({
-    repulsion: -2500,
-    linkDist: 140,
+    repulsion: -3500,
+    linkDist: 180,
     drift: false,
     gravity: 0.1
   });
@@ -173,7 +173,7 @@
           
           <div class="root-info">
              <div class="info-row">
-                <span class="label">Binary Pick:</span>
+                <span class="label">{params.mode === 'fuzzy' ? 'Fuzzy Pick:' : 'Binary Pick:'}</span>
                 <span class="value binary">{stats.binaryWinner || '...'}</span>
              </div>
              <div class="info-row">
@@ -184,11 +184,6 @@
        </div>
     </div>
 
-    <div class="floating-bottom-right">
-        <div class="kb-hint">
-            Interactive Behaviour Tree Engine | COS30002 Module 05
-        </div>
-    </div>
   </section>
 
   <Glossary bind:isOpen={glossaryOpen} bind:section={glossarySection} />
@@ -244,7 +239,7 @@
   
   .floating-top-left { position: absolute; top: 1.5rem; left: 1.5rem; pointer-events: none; z-index: 200; }
   .floating-top-right { position: absolute; top: 1.5rem; right: 1.5rem; pointer-events: none; z-index: 200; }
-  .floating-bottom-right { position: absolute; bottom: 1.5rem; right: 1.5rem; pointer-events: none; z-index: 200; }
+
 
   .physics-card, .decision-card {
     background: var(--glass-bg); backdrop-filter: blur(12px);
