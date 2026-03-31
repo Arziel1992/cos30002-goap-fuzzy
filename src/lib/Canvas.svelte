@@ -1,4 +1,5 @@
 <script>
+  import * as d3 from 'd3';
   import { onMount } from 'svelte';
 
   let { 
@@ -7,183 +8,198 @@
     containerRef 
   } = $props();
 
-  let canvas;
-  let ctx;
-  let width = 0;
-  let height = 0;
+  let svg = $state();
+  let wrapperDiv = $state();
+  let width = $state(0);
+  let height = $state(0);
 
-  const colors = {
-    accent: '#2563eb',
-    text: '#0f172a',
-    textSecondary: '#475569',
-    border: '#e2e8f0',
-    bg: '#f8fafc',
-    highlight: '#60a5fa',
-    leaf: 'rgba(59, 130, 246, 0.05)'
-  };
+  // Zoom management
+  let transform = $state({ x: 0, y: 0, k: 1 });
 
   function handleResize() {
-    if (!containerRef || !canvas || !ctx) return;
-    const rect = containerRef.getBoundingClientRect();
+    if (!wrapperDiv) return;
+    const rect = wrapperDiv.getBoundingClientRect();
     width = rect.width;
     height = rect.height;
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-    canvas.style.width = width + 'px';
-    canvas.style.height = height + 'px';
-    ctx.resetTransform();
-    ctx.scale(dpr, dpr);
   }
 
-  // Pre-defined static positions for the "Full Action State Map"
-  const nodeMap = {
-    'siege': { x: 0.5, y: 0.2, tier: 'HIGH' },
-    'skirmish': { x: 0.2, y: 0.5, tier: 'HIGH' },
-    'build_turret': { x: 0.8, y: 0.3, tier: 'COMPOSITE' },
-    'scavenge': { x: 0.8, y: 0.5, tier: 'COMPOSITE' },
-    'reload_task': { x: 0.2, y: 0.7, tier: 'COMPOSITE' },
-    'move_enemy': { x: 0.5, y: 0.5, tier: 'ATOMIC' },
-    'move_depot': { x: 0.8, y: 0.7, tier: 'ATOMIC' },
-    'move_health': { x: 0.5, y: 0.8, tier: 'ATOMIC' },
-    'find_medkit': { x: 0.8, y: 0.9, tier: 'LEAF' },
-    'take_reserve': { x: 0.5, y: 0.3, tier: 'LEAF' }
-  };
+  // Hierarchical Data Processing
+  let hierarchy = $derived.by(() => {
+    if (params.mode !== 'bt' || !stats.btRoot) return null;
 
-  function drawNode(x, y, label, tier, isActive = false, isComposite = false) {
-    const w = isComposite ? 180 : 130; 
-    const h = isComposite ? 50 : 36;
-    
-    // Composite Border (Design Pattern Visual)
-    if (isComposite) {
-        ctx.setLineDash([2, 4]);
-        ctx.strokeStyle = colors.accent;
-        ctx.beginPath();
-        ctx.roundRect(x - w/2 - 10, y - h/2 - 10, w + 20, h + 20, 12);
-        ctx.stroke();
-        ctx.setLineDash([]);
-    }
+    const root = d3.hierarchy(stats.btRoot, d => {
+        // Only return children if the node is expanded
+        return d.isExpanded !== false ? d.children : null;
+    });
 
-    ctx.fillStyle = isActive ? colors.accent : '#ffffff';
-    ctx.strokeStyle = isActive ? colors.accent : colors.border;
-    ctx.lineWidth = 1.5;
-    
-    ctx.beginPath();
-    ctx.roundRect(x - w/2, y - h/2, w, h, 6);
-    ctx.fill();
-    ctx.stroke();
-    
-    ctx.fillStyle = isActive ? '#fff' : colors.text;
-    ctx.font = `bold 0.7rem Inter, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(label.toUpperCase(), x, y);
+    const treeLayout = d3.tree()
+      .nodeSize([180, 160])
+      .separation((a, b) => (a.parent == b.parent ? 1 : 1.2));
 
-    // Tier Label
-    ctx.fillStyle = colors.textSecondary;
-    ctx.font = '600 0.5rem sans-serif';
-    ctx.fillText(tier, x, y + 14 + (isComposite ? 5 : 0));
-  }
+    return treeLayout(root);
+  });
 
-  function drawLine(x1, y1, x2, y2, isActive = false) {
-    ctx.strokeStyle = isActive ? colors.accent : 'rgba(0,0,0,0.05)';
-    ctx.lineWidth = isActive ? 3 : 1;
-    ctx.setLineDash(isActive ? [] : [5, 5]);
-    
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-  }
-
-  function render() {
-    if (!ctx) return;
-    ctx.clearRect(0, 0, width, height);
-
-    if (params.mode === 'goap') {
-        const plan = stats.currentPlan || [];
-        const activeNodeIds = new Set(plan.map(p => p.id));
-        
-        // 1. Draw "Composed Chains" (links between potential nodes)
-        const actions = stats.allNodes || [];
-        actions.forEach(a1 => {
-            const p1 = nodeMap[a1.id];
-            if (!p1) return;
-            actions.forEach(a2 => {
-              if (a1 === a2) return;
-              const p2 = nodeMap[a2.id];
-              if (!p2) return;
-              // If a1 satisfies a2, draw a potential link
-              for (const k in a1.post) {
-                if (a1.post[k] === a2.pre[k]) {
-                  const isActiveLink = activeNodeIds.has(a1.id) && activeNodeIds.has(a2.id);
-                  drawLine(p1.x * width, p1.y * height, p2.x * width, p2.y * height, isActiveLink);
-                }
-              }
-            });
-        });
-
-        // 2. Draw Nodes
-        actions.forEach(node => {
-          const pos = nodeMap[node.id];
-          if (!pos) return;
-          const isActive = activeNodeIds.has(node.id);
-          drawNode(pos.x * width, pos.y * height, node.name, pos.tier, isActive, node.composite);
-        });
-
-    } else {
-        const scores = stats.utilityScores || [];
-        const barW = 280; const barH = 44; const spacing = 45;
-        const totalH = (barH + spacing) * scores.length;
-        const startY = height / 2 - (totalH - spacing) / 2;
-        const startX = width / 2 - barW / 2;
-
-        scores.forEach((s, i) => {
-            const y = startY + i * (barH + spacing);
-            ctx.fillStyle = colors.text;
-            ctx.font = 'bold 0.8rem Inter, sans-serif';
-            ctx.textAlign = 'left';
-            ctx.fillText(s.label.toUpperCase(), startX, y - 10);
-
-            ctx.fillStyle = '#e2e8f0';
-            ctx.beginPath(); ctx.roundRect(startX, y, barW, barH, 6); ctx.fill();
-
-            ctx.fillStyle = i === 0 ? colors.accent : 'rgba(37, 99, 235, 0.2)';
-            ctx.beginPath(); ctx.roundRect(startX, y, barW * s.score, barH, 6); ctx.fill();
-
-            ctx.fillStyle = colors.textSecondary;
-            ctx.font = '500 0.6rem monospace';
-            ctx.textAlign = 'left';
-            ctx.fillText(s.breakdown, startX, y + barH + 12);
-
-            ctx.fillStyle = i === 0 ? '#ffffff' : colors.text;
-            ctx.font = '900 1.1rem monospace';
-            ctx.textAlign = 'right';
-            ctx.fillText(s.score.toFixed(2), startX + barW - 12, y + barH / 2 + 7);
-        });
-    }
-
-    requestAnimationFrame(render);
-  }
+  // Utility scores for chart mode
+  let utilityResult = $derived(stats.utilityScores || []);
 
   onMount(() => {
-    ctx = canvas.getContext('2d');
-    render();
+    const d3Zoom = d3.zoom()
+      .scaleExtent([0.2, 3])
+      .on('zoom', (event) => {
+        transform = event.transform;
+      });
+
+    d3.select(svg).call(d3Zoom);
+    
+    const resizeObserver = new ResizeObserver(() => handleResize());
+    resizeObserver.observe(wrapperDiv);
+    handleResize();
+
+    return () => resizeObserver.disconnect();
   });
 
-  $effect(() => {
-    if (containerRef && canvas) {
-      const resizeObserver = new ResizeObserver(() => handleResize());
-      resizeObserver.observe(containerRef);
-      handleResize();
-      return () => resizeObserver.disconnect();
+  function getStatusColor(status) {
+    switch (status) {
+      case 'SUCCESS': return '#22c55e';
+      case 'FAILURE': return '#ef4444';
+      case 'RUNNING': return '#3b82f6';
+      case 'EVALUATING': return '#eab308';
+      default: return '#f8fafc';
     }
-  });
+  }
+
+  function getStrokeColor(status) {
+     return status === 'EVALUATING' ? '#eab308' : '#e2e8f0';
+  }
+
+  function toggleExpand(node) {
+      node.data.isExpanded = !node.data.isExpanded;
+      // Trigger update
+      stats.btRoot = { ...stats.btRoot };
+  }
 </script>
 
-<canvas bind:this={canvas}></canvas>
+<div class="canvas-wrapper" bind:this={wrapperDiv}>
+  {#if params.mode === 'bt'}
+    <svg 
+      bind:this={svg} 
+      class="bt-svg"
+      viewBox="0 0 {width} {height}"
+    >
+      <g 
+        transform="translate({width/2 + transform.x}, {100 + transform.y}) scale({transform.k})"
+        class="zoomable-content"
+      >
+        {#if hierarchy}
+          <!-- Edges -->
+          {#each hierarchy.links() as link}
+            <path 
+              class="link"
+              d={d3.linkVertical()
+                .x(d => d.x)
+                .y(d => d.y)({
+                    source: link.source,
+                    target: link.target
+                })}
+              fill="none"
+              stroke="#cbd5e1"
+              stroke-width="5"
+              stroke-linecap="round"
+            />
+          {/each}
+
+          <!-- Nodes -->
+          {#each hierarchy.descendants() as node}
+            <g 
+              role="button"
+              aria-label="Toggle node {node.data.name}"
+              class="node-group" 
+              transform="translate({node.x}, {node.y})"
+              onclick={() => node.data.children?.length > 0 && toggleExpand(node)}
+              tabindex="0"
+              onkeydown={(e) => e.key === 'Enter' && node.data.children?.length > 0 && toggleExpand(node)}
+            >
+              <rect 
+                width="160" 
+                height="60" 
+                x="-80" 
+                y="-30" 
+                rx="12" 
+                fill={getStatusColor(node.data.status)}
+                stroke={getStrokeColor(node.data.status)}
+                stroke-width={node.data.status === 'EVALUATING' ? 4 : 2}
+                class="node-rect"
+                style="transition: all 0.3s ease;"
+              />
+              
+              <text 
+                class="node-label" 
+                text-anchor="middle"
+                dy="-5"
+                fill={node.data.status === 'SUCCESS' || node.data.status === 'FAILURE' || node.data.status === 'RUNNING' ? '#fff' : '#0f172a'}
+                font-weight="800"
+                font-size="10.5"
+              >
+                {node.data.name}
+              </text>
+
+              <text 
+                class="node-type" 
+                text-anchor="middle"
+                dy="15"
+                fill={node.data.status === 'SUCCESS' || node.data.status === 'FAILURE' || node.data.status === 'RUNNING' ? 'rgba(255,255,255,0.7)' : '#64748b'}
+                font-size="8"
+                font-weight="600"
+              >
+                {node.data.type?.toUpperCase()}
+              </text>
+
+              {#if node.data.children?.length > 0}
+                <circle r="8" cy="30" fill="#fff" stroke="#cbd5e1" class="expand-btn" />
+                <path 
+                   d={node.data.isExpanded ? "M-3 30 L3 30" : "M-3 30 L3 30 M0 27 L0 33"} 
+                   stroke="#64748b" stroke-width="1.5" 
+                />
+              {/if}
+            </g>
+          {/each}
+        {/if}
+      </g>
+    </svg>
+  {:else}
+    <!-- Utility Bar Chart Mode (Preserved) -->
+    <div class="utility-viz">
+        {#each utilityResult as s, i}
+          <div class="u-bar-group">
+            <div class="u-label-row">
+              <span class="u-label">{s.label}</span>
+              <span class="u-score">{s.score.toFixed(2)}</span>
+            </div>
+            <div class="u-bar-bg">
+              <div class="u-bar-fill" style="width: {s.score * 100}%; background: {i === 0 ? 'var(--accent)' : '#93c5fd'}"></div>
+            </div>
+          </div>
+        {/each}
+    </div>
+  {/if}
+</div>
 
 <style>
-  canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+  .canvas-wrapper { width: 100%; height: 100%; position: relative; overflow: hidden; }
+  .bt-svg { width: 100%; height: 100%; display: block; background: #f8fafc; cursor: grab; }
+  .bt-svg:active { cursor: grabbing; }
+
+  .node-group { cursor: pointer; outline: none; }
+  .node-rect { transition: fill 0.3s, stroke 0.3s; }
+  .link { stroke-linejoin: round; }
+
+  .utility-viz {
+    display: flex; flex-direction: column; gap: 2rem;
+    padding: 4rem; justify-content: center; height: 100%;
+    max-width: 600px; margin: 0 auto;
+  }
+  .u-bar-group { display: flex; flex-direction: column; gap: 0.8rem; }
+  .u-label-row { display: flex; justify-content: space-between; font-weight: 800; font-size: 0.9rem; }
+  .u-bar-bg { background: #e2e8f0; height: 50px; border-radius: 8px; overflow: hidden; }
+  .u-bar-fill { height: 100%; transition: width 0.4s ease-out; }
 </style>

@@ -1,91 +1,134 @@
 /**
- * GOAP & Utility Engine - COS30002
- * Advanced: Hierarchical & Composite Design Patterns.
+ * Behaviour Tree (BT) & Decision Engine - COS30002
+ * Implements Selectors, Sequences, and Atomic Leaves.
  */
 
-export class GOAPPlanner {
+export const NodeStatus = {
+  READY: 'READY',
+  RUNNING: 'RUNNING',
+  SUCCESS: 'SUCCESS',
+  FAILURE: 'FAILURE',
+  EVALUATING: 'EVALUATING'
+};
+
+export class BTNode {
+  constructor(id, name, type, children = []) {
+    this.id = id;
+    this.name = name;
+    this.type = type; // 'selector', 'sequence', 'action', 'condition'
+    this.children = children;
+    this.status = NodeStatus.READY;
+    this.isExpanded = true;
+  }
+}
+
+export class BehaviourTree {
   constructor() {
-    this.actions = [
-      // Sparse/High-Level Actions
-      { id: 'siege', name: 'Siege Target', cost: 10, pre: { hasTurret: true, nearEnemy: true }, post: { enemyDead: true }, composite: true },
-      { id: 'skirmish', name: 'Skirmish', cost: 5, pre: { hasAmmo: true, nearEnemy: true }, post: { enemyDead: true } },
-      
-      // Middle Layers
-      { id: 'build_turret', name: 'Build Auto-Turret', cost: 5, pre: { hasParts: true, nearEnemy: true }, post: { hasTurret: true } },
-      { id: 'scavenge', name: 'Scavenge for Parts', cost: 3, pre: { nearDepot: true }, post: { hasParts: true } },
-      { id: 'reload_task', name: 'Full Tactical Reload', cost: 2, pre: { hasAmmoReserve: true }, post: { hasAmmo: true }, composite: true },
-      
-      // Leaf/Low-Level Atomic Nodes (Denser)
-      { id: 'move_enemy', name: 'Patrol to Enemy', cost: 2, pre: { nearEnemy: false }, post: { nearEnemy: true } },
-      { id: 'move_depot', name: 'Move to Depot', cost: 2, pre: { nearDepot: false }, post: { nearDepot: true } },
-      { id: 'move_health', name: 'Seek Medkit', cost: 2, pre: { nearHealth: false }, post: { nearHealth: true } },
-      
-      // Resource Leaves
-      { id: 'find_medkit', name: 'Consume Kit', cost: 1, pre: { nearHealth: true }, post: { fullHealth: true } },
-      { id: 'take_reserve', name: 'Loot Reserves', cost: 1, pre: { nearDepot: true }, post: { hasAmmoReserve: true } }
-    ];
+    this.root = this.buildInitialTree();
   }
 
-  plan(goal, currentState) {
-    if (!goal) return { path: [], allNodes: this.actions };
-    
-    const open = [{ state: goal, path: [], cost: 0, parent: null }];
-    const closed = new Set();
-    
-    let iterations = 0;
-    while (open.length > 0 && iterations < 100) {
-      iterations++;
-      open.sort((a, b) => a.cost - b.cost);
-      const current = open.shift();
-      
-      if (this.isSatisfied(current.state, currentState)) {
-        return { 
-          path: current.path.reverse(), 
-          allNodes: this.actions 
-        }; 
-      }
+  buildInitialTree() {
+    // Composite Sub-Tree: Build Auto-Turret
+    const buildTurret = new BTNode('build_turret', 'BUILD AUTO-TURRET', 'sequence', [
+      new BTNode('scavenge', 'SCAVENGE FOR PARTS', 'action'),
+      new BTNode('move_depot', 'MOVE TO DEPOT', 'action'),
+      new BTNode('construct', 'CONSTRUCT TURRET', 'action')
+    ]);
+    buildTurret.isComposite = true;
 
-      const hash = JSON.stringify(Object.keys(current.state).sort().reduce((obj, key) => {
-        obj[key] = current.state[key];
-        return obj;
-      }, {}));
-      
-      if (closed.has(hash)) continue;
-      closed.add(hash);
+    // Sequence: Siege Target
+    const siege = new BTNode('siege', 'SIEGE TARGET', 'sequence', [
+      buildTurret
+    ]);
 
-      for (const action of this.actions) {
-        if (this.canSatisfy(action, current.state)) {
-            const nextState = { ...current.state };
-            for (const key in action.post) {
-                if (nextState[key] === action.post[key]) delete nextState[key];
-            }
-            for (const key in action.pre) {
-                nextState[key] = action.pre[key];
-            }
-            open.push({
-                state: nextState,
-                path: [...current.path, action],
-                cost: current.cost + action.cost,
-                parent: current
-            });
+    // Selector: Skirmish
+    const skirmish = new BTNode('skirmish', 'SKIRMISH', 'selector', [
+      new BTNode('reload', 'FULL TACTICAL RELOAD', 'action'),
+      new BTNode('patrol', 'PATROL TO ENEMY', 'action')
+    ]);
+
+    // Sequence: Emergency Survival
+    const emergency = new BTNode('emergency', 'EMERGENCY SURVIVAL', 'sequence', [
+      new BTNode('cond_health', 'Health < 30%', 'condition'),
+      new BTNode('seek_medkit', 'SEEK MEDKIT', 'action'),
+      new BTNode('consume_kit', 'CONSUME KIT', 'action')
+    ]);
+
+    // Root: Combat AI
+    return new BTNode('root', 'COMBAT AI', 'selector', [
+      emergency,
+      skirmish,
+      siege
+    ]);
+  }
+
+  tick(node, params) {
+    node.status = NodeStatus.EVALUATING;
+    
+    if (node.type === 'condition') {
+      const result = this.evaluateCondition(node, params);
+      node.status = result ? NodeStatus.SUCCESS : NodeStatus.FAILURE;
+      return node.status;
+    }
+
+    if (node.type === 'action') {
+      const result = this.evaluateAction(node, params);
+      node.status = result;
+      return node.status;
+    }
+
+    if (node.type === 'selector') {
+      for (const child of node.children) {
+        const res = this.tick(child, params);
+        if (res === NodeStatus.SUCCESS || res === NodeStatus.RUNNING) {
+          node.status = res;
+          // Mark remaining children as ready for next pass
+          this.resetRemaining(node, node.children.indexOf(child) + 1);
+          return res;
         }
       }
+      node.status = NodeStatus.FAILURE;
+      return NodeStatus.FAILURE;
     }
-    return { path: [], allNodes: this.actions }; 
+
+    if (node.type === 'sequence') {
+      for (const child of node.children) {
+        const res = this.tick(child, params);
+        if (res === NodeStatus.FAILURE || res === NodeStatus.RUNNING) {
+          node.status = res;
+          this.resetRemaining(node, node.children.indexOf(child) + 1);
+          return res;
+        }
+      }
+      node.status = NodeStatus.SUCCESS;
+      return NodeStatus.SUCCESS;
+    }
+
+    return NodeStatus.FAILURE;
   }
 
-  isSatisfied(requirements, state) {
-    for (const key in requirements) {
-        if (state[key] !== requirements[key]) return false;
-    }
+  evaluateCondition(node, params) {
+    if (node.id === 'cond_health') return params.health < 30;
     return true;
   }
 
-  canSatisfy(action, requirements) {
-    for (const key in requirements) {
-        if (action.post[key] === requirements[key]) return true;
+  evaluateAction(node, params) {
+    // Basic logic for simulation:
+    if (node.id === 'reload' && params.ammo > 10) return NodeStatus.FAILURE; // Don't reload if have ammo
+    if (node.id === 'patrol' && params.distEnemy < 10) return NodeStatus.SUCCESS;
+    if (node.id === 'seek_medkit' && params.distHealth > 0) return NodeStatus.RUNNING;
+    return NodeStatus.SUCCESS;
+  }
+
+  resetRemaining(node, startIndex) {
+    for (let i = startIndex; i < node.children.length; i++) {
+      this.resetNodes(node.children[i]);
     }
-    return false;
+  }
+
+  resetNodes(node) {
+    node.status = NodeStatus.READY;
+    if (node.children) node.children.forEach(c => this.resetNodes(c));
   }
 }
 
@@ -96,16 +139,9 @@ export class UtilityEngine {
     const de = distEnemy / 100; const dh = distHealth / 100;
     const da = distAmmo / 100;
 
-    const u_attack = a > 0 ? (0.4 * a + 0.6 * (1 - de)) : 0;
-    const u_heal = Math.pow(1 - h, 2) * (1 - dh);
-    const u_flee = Math.max(0, (1 - h) * Math.pow(1 - de, 3));
-    const u_ammo = a < 0.3 ? (1 - a) * (1 - da) : 0;
-
     return [
-      { id: 'attack', label: 'Composite Attack', score: Math.min(1, Math.max(0, u_attack)), breakdown: `(Ammo ${a.toFixed(2)} * 0.4) + (DistEnemyInv ${(1-de).toFixed(2)} * 0.6)` },
-      { id: 'heal', label: 'Composite Healing', score: Math.min(1, Math.max(0, u_heal)), breakdown: `(HealthInv ${(1-h).toFixed(2)}^2) * (DistHealthInv ${(1-dh).toFixed(2)})` },
-      { id: 'flee', label: 'Reactive Flee', score: Math.min(1, Math.max(0, u_flee)), breakdown: `(HealthInv ${(1-h).toFixed(2)}) * (DistEnemyInv ${(1-de).toFixed(2)}^3)` },
-      { id: 'ammo', label: 'Resource Search', score: Math.min(1, Math.max(0, u_ammo)), breakdown: `(LowAmmoInv ${(1-a).toFixed(2)}) * (DistAmmoInv ${(1-da).toFixed(2)})` }
+      { id: 'attack', label: 'Composite Attack', score: Math.min(1, Math.max(0, (0.4 * a + 0.6 * (1 - de)))), breakdown: 'Ammo/Dist Blend' },
+      { id: 'heal', label: 'Composite Healing', score: Math.min(1, Math.max(0, Math.pow(1-h, 2) * (1-dh))), breakdown: 'Exponential Health Drop' }
     ].sort((a,b) => b.score - a.score);
   }
 }

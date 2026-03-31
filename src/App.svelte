@@ -3,14 +3,14 @@
   import Canvas from './lib/Canvas.svelte';
   import Controls from './lib/Controls.svelte';
   import Glossary from './lib/Glossary.svelte';
-  import { GOAPPlanner, UtilityEngine } from './lib/Simulation.js';
-  import { onMount } from 'svelte';
+  import { BehaviourTree, UtilityEngine, NodeStatus } from './lib/Simulation.js';
+  import { onMount, tick } from 'svelte';
 
-  let planner = new GOAPPlanner();
+  let bt = new BehaviourTree();
   let utility = new UtilityEngine();
 
   let params = $state({
-    mode: 'goap', // 'goap', 'utility'
+    mode: 'bt', // 'bt', 'utility'
     health: 80,
     ammo: 10,
     distEnemy: 50,
@@ -19,37 +19,10 @@
     goal: 'enemyDead'
   });
 
-  let stats = $derived.by(() => {
-    if (params.mode === 'goap') {
-      const currentState = {
-        hasAmmo: params.ammo > 0,
-        hasAmmoReserve: false,
-        nearEnemy: params.distEnemy < 10,
-        nearHealth: params.distHealth < 10,
-        nearAmmo: params.distAmmo < 10,
-        enemyDead: false,
-        fullHealth: params.health >= 100
-      };
-      const goals = { 
-        enemyDead: { enemyDead: true },
-        fullHealth: { fullHealth: true }
-      };
-      const result = planner.plan(goals[params.goal], currentState);
-      return {
-        currentPlan: result.path,
-        allNodes: result.allNodes,
-        utilityScores: [],
-        lastDecision: result.path?.[0]?.name || 'Idle'
-      };
-    } else {
-      const scores = utility.calculate(params);
-      return {
-        currentPlan: [],
-        allNodes: [],
-        utilityScores: scores,
-        lastDecision: scores[0]?.label || 'Idle'
-      };
-    }
+  let stats = $state({
+    btRoot: bt.root,
+    lastDecision: 'Waiting for Tick...',
+    utilityScores: []
   });
 
   let sidebarWidth = $state(400);
@@ -62,6 +35,24 @@
   function openGlossary(section = 'root') {
     glossarySection = section;
     glossaryOpen = true;
+  }
+
+  function tickAI() {
+    if (params.mode === 'bt') {
+      bt.tick(bt.root, params);
+      // Trigger Svelte state update (since bt.root is mutated internally)
+      stats.btRoot = { ...bt.root };
+      stats.lastDecision = bt.root.status;
+    } else {
+      stats.utilityScores = utility.calculate(params);
+      stats.lastDecision = stats.utilityScores[0].label;
+    }
+  }
+
+  function resetTrees() {
+    bt = new BehaviourTree();
+    stats.btRoot = bt.root;
+    stats.lastDecision = 'Reset Complete';
   }
 
   onMount(() => {
@@ -89,6 +80,8 @@
       <hr />
       <Controls 
         bind:params 
+        onTick={tickAI}
+        onReset={resetTrees}
         onGlossary={openGlossary}
       />
     </div>
@@ -103,14 +96,14 @@
     
     <div class="floating-top-right">
        <div class="decision-card">
-          <span class="label">Current Decision</span>
-          <span class="value">{stats.lastDecision}</span>
+          <span class="label">Root Execution Status</span>
+          <span class="value" class:success={stats.lastDecision === 'SUCCESS'} class:failure={stats.lastDecision === 'FAILURE'}>{stats.lastDecision}</span>
        </div>
     </div>
 
     <div class="floating-bottom-right">
         <div class="kb-hint">
-            Interactive Reasoning Engine | COS30002 Module 05
+            Interactive Behaviour Tree Engine | COS30002 Module 05
         </div>
     </div>
   </section>
@@ -127,6 +120,12 @@
     --accent: #2563eb;
     --panel-border: #e2e8f0;
     --glass-bg: rgba(255, 255, 255, 0.85);
+    
+    --bt-ready: #94a3b8;
+    --bt-evaluating: #eab308;
+    --bt-success: #22c55e;
+    --bt-failure: #ef4444;
+    --bt-running: #3b82f6;
   }
 
   :global(body) {
@@ -173,6 +172,9 @@
 
   .decision-card .label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-secondary); font-weight: 700; }
   .decision-card .value { font-size: 1.3rem; font-weight: 800; color: var(--accent); }
+
+  .value.success { color: var(--bt-success); }
+  .value.failure { color: var(--bt-failure); }
 
   .kb-hint {
     background: var(--glass-bg); backdrop-filter: blur(4px);
