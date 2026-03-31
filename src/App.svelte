@@ -20,7 +20,7 @@
   });
 
   let physics = $state({
-    repulsion: -3500,
+    repulsion: 3500,
     linkDist: 180,
     drift: false,
     gravity: 0.1
@@ -122,7 +122,7 @@
           <div class="physics-grid">
              <div class="p-row">
                 <label for="repulsion">Repulsion</label>
-                <input id="repulsion" type="range" min="-4000" max="-500" step="100" bind:value={physics.repulsion} />
+                <input id="repulsion" type="range" min="500" max="4000" step="100" bind:value={physics.repulsion} />
              </div>
              <div class="p-row">
                 <label for="linkDist">Link Dist</label>

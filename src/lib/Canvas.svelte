@@ -35,12 +35,26 @@
     const d3Nodes = root.descendants();
     const d3Links = root.links();
 
+    // Collect IDs of nodes that are direct children of scoped parents
+    const scopedChildIds = new Set();
+    const scopedParentChildCounts = new Map();
+    d3Nodes.forEach(d => {
+      if (d.data.isScoped) {
+        const desc = d3.hierarchy(d.data, n => n.children).descendants();
+        const childCount = desc.length - 1; // exclude the parent itself
+        scopedParentChildCounts.set(d.data.id, childCount);
+        desc.slice(1).forEach(c => scopedChildIds.add(c.data.id));
+      }
+    });
+
     const forceNodes = d3Nodes.map(d => {
       const existing = untrack(() => nodes.find(n => n.id === d.data.id));
       return {
         id: d.data.id,
         data: d.data,
         depth: d.depth,
+        isScopedChild: scopedChildIds.has(d.data.id),
+        scopedGroupSize: scopedParentChildCounts.get(d.data.id) || 0,
         x: existing?.x || (Math.random() - 0.5) * 200,
         y: existing?.y || d.depth * 200
       };
@@ -58,7 +72,11 @@
 
     simulation = d3.forceSimulation(forceNodes)
       .force('link', d3.forceLink(forceLinks).distance(physics.linkDist).strength(1))
-      .force('charge', d3.forceManyBody().strength(physics.repulsion))
+      .force('charge', d3.forceManyBody().strength(d => {
+        if (d.isScopedChild) return -physics.repulsion * 0.1;
+        if (d.scopedGroupSize > 0) return -physics.repulsion * (1 + d.scopedGroupSize);
+        return -physics.repulsion;
+      }))
       .force('collide', d3.forceCollide(90))
       .force('x', d3.forceX(0).strength(physics.gravity))
       .force('y', d3.forceY(d => d.depth * 200).strength(physics.drift ? 0.05 : 2))
@@ -73,7 +91,11 @@
   // Reactive adjustment of forces without restarting the whole structure
   $effect(() => {
      if (!simulation) return;
-     simulation.force('charge').strength(physics.repulsion);
+     simulation.force('charge').strength(d => {
+        if (d.isScopedChild) return -physics.repulsion * 0.1;
+        if (d.scopedGroupSize > 0) return -physics.repulsion * (1 + d.scopedGroupSize);
+        return -physics.repulsion;
+     });
      simulation.force('link').distance(physics.linkDist);
      simulation.force('x').strength(physics.gravity);
      simulation.force('y', d3.forceY(d => d.depth * 200).strength(physics.drift ? 0.05 : 2));
