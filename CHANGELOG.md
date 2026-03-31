@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2026-04-01 - 00:51] - Fix CI Deployment & Node Deprecation
+
+### Fixed
+
+- Upgraded `actions/setup-node` from Node 20 to Node 22 (current LTS) to resolve GitHub Actions Node 20 deprecation warning.
+- Bumped `actions/deploy-pages` from `v4` to `v5` to resolve associated Node 20 runtime warning.
+
+### Notes
+
+- **Action required**: The GitHub Pages source must be set to **"GitHub Actions"** (not "Deploy from a branch") in the repo's Settings → Pages. The MIME error (`/src/main.js blocked`) is caused by Pages serving the raw repo root `index.html` instead of the CI-built `dist/`.
+
 ## [2026-04-01 - 00:27] - Fix Vite Version Compatibility
 
 ### Fixed
