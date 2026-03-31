@@ -1,6 +1,6 @@
 {
   "name": "cos30002-goap-fuzzy",
-  "version": "2026.03.31-2359",
+  "version": "2026.04.01-0027",
   "private": true,
   "type": "module",
   "scripts": {
@@ -14,6 +14,6 @@
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^4.0.0",
-    "vite": "^8.0.0"
+    "vite": "^5.0.0"
   }
 }
