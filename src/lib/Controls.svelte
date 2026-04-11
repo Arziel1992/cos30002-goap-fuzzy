@@ -1,21 +1,31 @@
 <script>
-  let { 
-    params = $bindable(), 
-    onTick = () => {},
-    onReset = () => {},
-    onGlossary = () => {}
-  } = $props();
+let {
+	params = $bindable(),
+	onTick = () => {},
+	onReset = () => {},
+	onGlossary = () => {},
+} = $props();
 
-  const modes = [
-    { id: 'binary', label: 'Evaluation: Binary', tooltip: 'Traditional priority-based execution. Branches are evaluated in a fixed order.' },
-    { id: 'fuzzy', label: 'Evaluation: Fuzzy', tooltip: 'Utility-based execution. Selector children are re-prioritized based on real-time scores.' }
-  ];
+const modes = [
+	{
+		id: "binary",
+		label: "Evaluation: Binary",
+		tooltip:
+			"Traditional priority-based execution. Branches are evaluated in a fixed order.",
+	},
+	{
+		id: "fuzzy",
+		label: "Evaluation: Fuzzy",
+		tooltip:
+			"Utility-based execution. Selector children are re-prioritized based on real-time scores.",
+	},
+];
 
-  const goals = [
-    { id: 'patrol', label: 'Patrol Territory' },
-    { id: 'defense', label: 'Defensive Stand' },
-    { id: 'siege', label: 'Offensive Siege' }
-  ];
+const goals = [
+	{ id: "patrol", label: "Patrol Territory" },
+	{ id: "defense", label: "Defensive Stand" },
+	{ id: "siege", label: "Offensive Siege" },
+];
 </script>
 
 <div class="controls-panel">

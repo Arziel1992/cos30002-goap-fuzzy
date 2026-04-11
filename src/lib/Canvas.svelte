@@ -1,153 +1,182 @@
 <script>
-  import * as d3 from 'd3';
-  import { onMount, tick, untrack } from 'svelte';
+import * as d3 from "d3";
+import { onMount, tick, untrack } from "svelte";
 
-  let { 
-    stats, 
-    params, 
-    physics,
-    containerRef 
-  } = $props();
+let { stats, params, physics, containerRef } = $props();
 
-  let svg = $state();
-  let wrapperDiv = $state();
-  let width = $state(0);
-  let height = $state(0);
-  let transform = $state({ x: 0, y: 0, k: 0.8 });
+let svg = $state();
+let wrapperDiv = $state();
+let width = $state(0);
+let height = $state(0);
+let transform = $state({ x: 0, y: 0, k: 0.8 });
 
-  // Force simulation state
-  let nodes = $state([]);
-  let links = $state([]);
-  let simulation;
+// Force simulation state
+let nodes = $state([]);
+let links = $state([]);
+let simulation;
 
-  function handleResize() {
-    if (!wrapperDiv) return;
-    const rect = wrapperDiv.getBoundingClientRect();
-    width = rect.width;
-    height = rect.height;
-  }
+function handleResize() {
+	if (!wrapperDiv) return;
+	const rect = wrapperDiv.getBoundingClientRect();
+	width = rect.width;
+	height = rect.height;
+}
 
-  // Effect to update simulation structure
-  $effect(() => {
-    if (!stats.btRoot) return;
+// Effect to update simulation structure
+$effect(() => {
+	if (!stats.btRoot) return;
 
-    const root = d3.hierarchy(stats.btRoot, d => d.isExpanded !== false ? d.children : null);
-    const d3Nodes = root.descendants();
-    const d3Links = root.links();
+	const root = d3.hierarchy(stats.btRoot, (d) =>
+		d.isExpanded !== false ? d.children : null,
+	);
+	const d3Nodes = root.descendants();
+	const d3Links = root.links();
 
-    // Collect IDs of nodes that are direct children of scoped parents
-    const scopedChildIds = new Set();
-    const scopedParentChildCounts = new Map();
-    d3Nodes.forEach(d => {
-      if (d.data.isScoped) {
-        const desc = d3.hierarchy(d.data, n => n.children).descendants();
-        const childCount = desc.length - 1; // exclude the parent itself
-        scopedParentChildCounts.set(d.data.id, childCount);
-        desc.slice(1).forEach(c => scopedChildIds.add(c.data.id));
-      }
-    });
+	// Collect IDs of nodes that are direct children of scoped parents
+	const scopedChildIds = new Set();
+	const scopedParentChildCounts = new Map();
+	d3Nodes.forEach((d) => {
+		if (d.data.isScoped) {
+			const desc = d3.hierarchy(d.data, (n) => n.children).descendants();
+			const childCount = desc.length - 1; // exclude the parent itself
+			scopedParentChildCounts.set(d.data.id, childCount);
+			desc.slice(1).forEach((c) => scopedChildIds.add(c.data.id));
+		}
+	});
 
-    const forceNodes = d3Nodes.map(d => {
-      const existing = untrack(() => nodes.find(n => n.id === d.data.id));
-      return {
-        id: d.data.id,
-        data: d.data,
-        depth: d.depth,
-        isScopedChild: scopedChildIds.has(d.data.id),
-        scopedGroupSize: scopedParentChildCounts.get(d.data.id) || 0,
-        x: existing?.x || (Math.random() - 0.5) * 200,
-        y: existing?.y || d.depth * 200
-      };
-    });
+	const forceNodes = d3Nodes.map((d) => {
+		const existing = untrack(() => nodes.find((n) => n.id === d.data.id));
+		return {
+			id: d.data.id,
+			data: d.data,
+			depth: d.depth,
+			isScopedChild: scopedChildIds.has(d.data.id),
+			scopedGroupSize: scopedParentChildCounts.get(d.data.id) || 0,
+			x: existing?.x || (Math.random() - 0.5) * 200,
+			y: existing?.y || d.depth * 200,
+		};
+	});
 
-    const forceLinks = d3Links.map(l => ({
-      source: forceNodes.find(n => n.id === l.source.data.id),
-      target: forceNodes.find(n => n.id === l.target.data.id)
-    }));
+	const forceLinks = d3Links.map((l) => ({
+		source: forceNodes.find((n) => n.id === l.source.data.id),
+		target: forceNodes.find((n) => n.id === l.target.data.id),
+	}));
 
-    nodes = forceNodes;
-    links = forceLinks;
+	nodes = forceNodes;
+	links = forceLinks;
 
-    if (simulation) simulation.stop();
+	if (simulation) simulation.stop();
 
-    simulation = d3.forceSimulation(forceNodes)
-      .force('link', d3.forceLink(forceLinks).distance(physics.linkDist).strength(1))
-      .force('charge', d3.forceManyBody().strength(d => {
-        if (d.isScopedChild) return -physics.repulsion * 0.1;
-        if (d.scopedGroupSize > 0) return -physics.repulsion * (1 + d.scopedGroupSize);
-        return -physics.repulsion;
-      }))
-      .force('collide', d3.forceCollide(90))
-      .force('x', d3.forceX(0).strength(physics.gravity))
-      .force('y', d3.forceY(d => d.depth * 200).strength(physics.drift ? 0.05 : 2))
-      .on('tick', () => {
-         nodes = [...forceNodes];
-         links = [...forceLinks];
-      });
+	simulation = d3
+		.forceSimulation(forceNodes)
+		.force(
+			"link",
+			d3.forceLink(forceLinks).distance(physics.linkDist).strength(1),
+		)
+		.force(
+			"charge",
+			d3.forceManyBody().strength((d) => {
+				if (d.isScopedChild) return -physics.repulsion * 0.1;
+				if (d.scopedGroupSize > 0)
+					return -physics.repulsion * (1 + d.scopedGroupSize);
+				return -physics.repulsion;
+			}),
+		)
+		.force("collide", d3.forceCollide(90))
+		.force("x", d3.forceX(0).strength(physics.gravity))
+		.force(
+			"y",
+			d3.forceY((d) => d.depth * 200).strength(physics.drift ? 0.05 : 2),
+		)
+		.on("tick", () => {
+			nodes = [...forceNodes];
+			links = [...forceLinks];
+		});
 
-    simulation.alpha(1).restart();
-  });
+	simulation.alpha(1).restart();
+});
 
-  // Reactive adjustment of forces without restarting the whole structure
-  $effect(() => {
-     if (!simulation) return;
-     simulation.force('charge').strength(d => {
-        if (d.isScopedChild) return -physics.repulsion * 0.1;
-        if (d.scopedGroupSize > 0) return -physics.repulsion * (1 + d.scopedGroupSize);
-        return -physics.repulsion;
-     });
-     simulation.force('link').distance(physics.linkDist);
-     simulation.force('x').strength(physics.gravity);
-     simulation.force('y', d3.forceY(d => d.depth * 200).strength(physics.drift ? 0.05 : 2));
-     simulation.alpha(0.3).restart();
-  });
+// Reactive adjustment of forces without restarting the whole structure
+$effect(() => {
+	if (!simulation) return;
+	simulation.force("charge").strength((d) => {
+		if (d.isScopedChild) return -physics.repulsion * 0.1;
+		if (d.scopedGroupSize > 0)
+			return -physics.repulsion * (1 + d.scopedGroupSize);
+		return -physics.repulsion;
+	});
+	simulation.force("link").distance(physics.linkDist);
+	simulation.force("x").strength(physics.gravity);
+	simulation.force(
+		"y",
+		d3.forceY((d) => d.depth * 200).strength(physics.drift ? 0.05 : 2),
+	);
+	simulation.alpha(0.3).restart();
+});
 
-  let scopedRegions = $derived.by(() => {
-    const regions = [];
-    const scopedNodes = nodes.filter(n => n.data.isScoped);
-    
-    scopedNodes.forEach(sn => {
-       const subRoot = d3.hierarchy(sn.data, d => d.children);
-       const subIds = subRoot.descendants().map(d => d.data.id);
-       const subNodes = nodes.filter(n => subIds.includes(n.id));
+let scopedRegions = $derived.by(() => {
+	const regions = [];
+	const scopedNodes = nodes.filter((n) => n.data.isScoped);
 
-       if (subNodes.length > 0) {
-          const minX = Math.min(...subNodes.map(n => n.x)) - 80;
-          const maxX = Math.max(...subNodes.map(n => n.x)) + 80;
-          const minY = Math.min(...subNodes.map(n => n.y)) - 50;
-          const maxY = Math.max(...subNodes.map(n => n.y)) + 70;
-          regions.push({ id: sn.id, x: minX, y: minY, w: maxX - minX, h: maxY - minY, label: sn.data.name });
-       }
-    });
-    return regions;
-  });
+	scopedNodes.forEach((sn) => {
+		const subRoot = d3.hierarchy(sn.data, (d) => d.children);
+		const subIds = subRoot.descendants().map((d) => d.data.id);
+		const subNodes = nodes.filter((n) => subIds.includes(n.id));
 
-  onMount(() => {
-    const d3Zoom = d3.zoom().scaleExtent([0.1, 4]).on('zoom', (event) => { transform = event.transform; });
-    d3.select(svg).call(d3Zoom);
-    const resizeObserver = new ResizeObserver(() => handleResize());
-    resizeObserver.observe(wrapperDiv);
-    handleResize();
-    return () => {
-      resizeObserver.disconnect();
-      if (simulation) simulation.stop();
-    };
-  });
+		if (subNodes.length > 0) {
+			const minX = Math.min(...subNodes.map((n) => n.x)) - 80;
+			const maxX = Math.max(...subNodes.map((n) => n.x)) + 80;
+			const minY = Math.min(...subNodes.map((n) => n.y)) - 50;
+			const maxY = Math.max(...subNodes.map((n) => n.y)) + 70;
+			regions.push({
+				id: sn.id,
+				x: minX,
+				y: minY,
+				w: maxX - minX,
+				h: maxY - minY,
+				label: sn.data.name,
+			});
+		}
+	});
+	return regions;
+});
 
-  function getStatusColor(status) {
-    switch (status) {
-      case 'SUCCESS': return '#22c55e';
-      case 'FAILURE': return '#ef4444';
-      case 'RUNNING': return '#3b82f6';
-      case 'EVALUATING': return '#eab308';
-      default: return '#94a3b8';
-    }
-  }
+onMount(() => {
+	const d3Zoom = d3
+		.zoom()
+		.scaleExtent([0.1, 4])
+		.on("zoom", (event) => {
+			transform = event.transform;
+		});
+	d3.select(svg).call(d3Zoom);
+	const resizeObserver = new ResizeObserver(() => handleResize());
+	resizeObserver.observe(wrapperDiv);
+	handleResize();
+	return () => {
+		resizeObserver.disconnect();
+		if (simulation) simulation.stop();
+	};
+});
 
-  function toggleExpand(nodeData) {
-      nodeData.isExpanded = !nodeData.isExpanded;
-      stats.btRoot = { ...stats.btRoot };
-  }
+function getStatusColor(status) {
+	switch (status) {
+		case "SUCCESS":
+			return "#22c55e";
+		case "FAILURE":
+			return "#ef4444";
+		case "RUNNING":
+			return "#3b82f6";
+		case "EVALUATING":
+			return "#eab308";
+		default:
+			return "#94a3b8";
+	}
+}
+
+function toggleExpand(nodeData) {
+	nodeData.isExpanded = !nodeData.isExpanded;
+	stats.btRoot = { ...stats.btRoot };
+}
 </script>
 
 <div class="canvas-wrapper" bind:this={wrapperDiv}>

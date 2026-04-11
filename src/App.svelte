@@ -1,75 +1,78 @@
 <script>
-  import Sidebar from './lib/Sidebar.svelte';
-  import Canvas from './lib/Canvas.svelte';
-  import Controls from './lib/Controls.svelte';
-  import Glossary from './lib/Glossary.svelte';
-  import { BehaviourTree, UtilityEngine } from './lib/Simulation.js';
+import Canvas from "./lib/Canvas.svelte";
+import Controls from "./lib/Controls.svelte";
+import Glossary from "./lib/Glossary.svelte";
+import Sidebar from "./lib/Sidebar.svelte";
+import { BehaviourTree, UtilityEngine } from "./lib/Simulation.js";
 
-  let bt = new BehaviourTree();
-  let utility = new UtilityEngine();
+let bt = new BehaviourTree();
+let utility = new UtilityEngine();
 
-  let params = $state({
-    mode: 'binary', // 'binary' or 'fuzzy'
-    health: 80,
-    ammo: 20,
-    distEnemy: 50,
-    distHealth: 70,
-    distAmmo: 30,
-    goal: 'patrol'
-  });
+let params = $state({
+	mode: "binary", // 'binary' or 'fuzzy'
+	health: 80,
+	ammo: 20,
+	distEnemy: 50,
+	distHealth: 70,
+	distAmmo: 30,
+	goal: "patrol",
+});
 
-  let physics = $state({
-    repulsion: 3500,
-    linkDist: 180,
-    drift: false,
-    gravity: 0.1
-  });
+let physics = $state({
+	repulsion: 3500,
+	linkDist: 180,
+	drift: false,
+	gravity: 0.1,
+});
 
-  let stats = $state({
-    btRoot: bt.root,
-    lastDecision: 'READY',
-    utilityScores: [],
-    binaryWinner: null
-  });
+let stats = $state({
+	btRoot: bt.root,
+	lastDecision: "READY",
+	utilityScores: [],
+	binaryWinner: null,
+});
 
-  let containerRef = $state();
+let containerRef = $state();
 
-  let leftOpen = $state(true);
-  let rightOpen = $state(true);
+let leftOpen = $state(true);
+let rightOpen = $state(true);
 
-  let glossaryOpen = $state(false);
-  let glossarySection = $state('root');
+let glossaryOpen = $state(false);
+let glossarySection = $state("root");
 
-  function openGlossary(section = 'root') {
-    glossarySection = section;
-    glossaryOpen = true;
-  }
+function openGlossary(section = "root") {
+	glossarySection = section;
+	glossaryOpen = true;
+}
 
-  function tickAI() {
-    bt.tick(bt.root, params, params.mode);
-    stats.btRoot = { ...bt.root };
-    stats.lastDecision = bt.root.status;
+function tickAI() {
+	bt.tick(bt.root, params, params.mode);
+	stats.btRoot = { ...bt.root };
+	stats.lastDecision = bt.root.status;
 
-    let rawScores = utility.calculateScores(params);
-    const winningBranch = bt.root.children.find(c => c.status === 'SUCCESS' || c.status === 'RUNNING');
+	let rawScores = utility.calculateScores(params);
+	const winningBranch = bt.root.children.find(
+		(c) => c.status === "SUCCESS" || c.status === "RUNNING",
+	);
 
-    if (params.mode === 'binary') {
-       stats.utilityScores = rawScores.map(s => ({
-          ...s,
-          score: winningBranch && winningBranch.id.includes(s.id.split('-')[0]) ? 1 : 0
-       }));
-    } else {
-       stats.utilityScores = rawScores;
-    }
+	if (params.mode === "binary") {
+		stats.utilityScores = rawScores.map((s) => ({
+			...s,
+			score:
+				winningBranch && winningBranch.id.includes(s.id.split("-")[0]) ? 1 : 0,
+		}));
+	} else {
+		stats.utilityScores = rawScores;
+	}
 
-    stats.binaryWinner = winningBranch ? winningBranch.name : 'Searching...';
-  }
+	stats.binaryWinner = winningBranch ? winningBranch.name : "Searching...";
+}
 
-  function resetTrees() {
-    bt = new BehaviourTree();
-    stats.btRoot = bt.root;
-    stats.lastDecision = 'Reset Complete';
-  }
+function resetTrees() {
+	bt = new BehaviourTree();
+	stats.btRoot = bt.root;
+	stats.lastDecision = "Reset Complete";
+}
 </script>
 
 <main class="app-layout">
