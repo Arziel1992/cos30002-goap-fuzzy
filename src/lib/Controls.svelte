@@ -90,18 +90,6 @@ const goals = [
 </div>
 
 <style>
-  .controls-panel { display: flex; flex-direction: column; gap: 1rem; }
-  h3 { font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; margin: 0; font-weight: 800; }
-  .section-header { display: flex; justify-content: space-between; align-items: center; margin: 0.5rem 0; }
-
-  .glossary-btn {
-    background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3);
-    color: var(--accent); width: 24px; height: 24px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center; font-size: 0.8rem;
-    font-weight: 800; cursor: pointer; transition: all 0.2s;
-  }
-  .glossary-btn:hover { background: var(--accent); color: white; }
-
   .toggle-list { display: flex; flex-direction: column; gap: 0.5rem; }
   .toggle-list button {
     padding: 0.8rem 1rem; border-radius: 12px; border: 2px solid var(--panel-border);
@@ -126,8 +114,7 @@ const goals = [
     border: 2px solid var(--panel-border); border-radius: 12px; font-weight: 800; cursor: pointer;
   }
 
-  .divider { border: 0; border-top: 1px solid #e2e8f0; margin: 1.5rem 0; }
-
+  
   .field-label { display: block; font-size: 0.7rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.5rem; }
 
   .select-wrapper { position: relative; width: 100%; }
@@ -141,6 +128,8 @@ const goals = [
     position: absolute; right: 1rem; top: 50%; transform: translateY(-50%);
     pointer-events: none; font-size: 0.6rem; color: #94a3b8;
   }
+
+    
 
   .control-group { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.5rem; }
   .label-row { display: flex; justify-content: space-between; font-size: 0.85rem; color: #475569; font-weight: 700; }
