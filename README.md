@@ -21,7 +21,14 @@ The planner selects the path with the minimum Total Cost from the goal state bac
 $$Score = \sum (Weight_n \times Curve_n(Variable))$$
 Each action competes; the highest score is selected as the current decision.
 
-## 👨‍🏫 Local Development
+## 💻 Tech Stack
+
+- **Framework:** [Svelte 5](https://svelte.dev/)
+- **Build Tool:** [Vite](https://vitejs.dev/)
+- **Rendering:** HTML5 Canvas API
+- **Styling:** CSS variables via Master Template (`app.css`)
+
+## 👨‍🏫 Local Development & Deployment
 
 1. **Install Dependencies:**
    ```bash
@@ -33,11 +40,14 @@ Each action competes; the highest score is selected as the current decision.
    npm run dev
    ```
 
-3. **Build for Production:**
+3. **Build for Production (Canvas RCE Deployment):**
    ```bash
    npm run build
    ```
 
 ## 📄 License
 
-Educational material for Swinburne University's COS30002 "AI for Games". ❤️
+This repository is licensed under the terms described in the [LICENSE](./LICENSE) file. 
+
+---
+_Made with ❤️ for Swinburne — COS30002 Artificial Intelligence for Games — By E. Ketterer_

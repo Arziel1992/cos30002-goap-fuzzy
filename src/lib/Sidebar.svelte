@@ -1,7 +1,7 @@
 <section class="sidebar-content">
   <header>
     <h1>Decision Architectures</h1>
-    <p class="tagline">Reasoning Frameworks for COS30002</p>
+    <p class="tagline">Decision Architectures &mdash; COS30002 Module 5</p>
   </header>
 
   <div class="md-body">
