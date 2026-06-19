@@ -5,7 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2026-06-19 - 22:18] - Conform to refined tool_template
+
+## 2026-06-19 - 23:18
+
+### Changed
+
+- Migrated the package manager from npm to **pnpm** (global pnpm via Volta).
+- Updated CI (`deploy.yml`) to set up pnpm via `pnpm/action-setup` and run `pnpm install --frozen-lockfile` + `pnpm run build`.
+- Updated README commands to pnpm.
+
+### Added
+
+- `pnpm-lock.yaml` (imported from the previous `package-lock.json`, which was removed).
+- Node pin `"volta": { "node": "24.17.0" }` in `package.json`.
+
+## 2026-06-19 - 22:18 - Conform to refined tool_template
 
 ### Changed
 
@@ -23,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Removed the broken `/vite.svg` favicon reference (the asset did not exist, causing a 404).
 
-## [2026-04-01 - 00:51] - Fix CI Deployment & Node Deprecation
+## 2026-04-01 - 00:51 - Fix CI Deployment & Node Deprecation
 
 ### Fixed
 
@@ -34,19 +48,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Action required**: The GitHub Pages source must be set to **"GitHub Actions"** (not "Deploy from a branch") in the repo's Settings → Pages. The MIME error (`/src/main.js blocked`) is caused by Pages serving the raw repo root `index.html` instead of the CI-built `dist/`.
 
-## [2026-04-01 - 00:27] - Fix Vite Version Compatibility
+## 2026-04-01 - 00:27 - Fix Vite Version Compatibility
 
 ### Fixed
 
 - Downgraded `vite` from `^8.0.0` to `^5.0.0` to satisfy `@sveltejs/vite-plugin-svelte@4` peer dependency (`vite ^5.0.0` required). GitHub Actions CI was failing with `ERESOLVE`.
 
-## [2026-03-31 - 23:59] - Copyright Footer
+## 2026-03-31 - 23:59 - Copyright Footer
 
 ### Added
 
 - Copyright footer (© E. Ketterer Ortiz) to the right sidebar in all three projects.
 
-## [2026-03-31 - 23:47] - Dual Sidebar Layout
+## 2026-03-31 - 23:47 - Dual Sidebar Layout
 
 ### Changed
 
@@ -56,14 +70,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added toggle buttons on canvas edges to show/hide each sidebar.
 - Removed drag-resize functionality.
 
-## [2026-03-31 - 15:53] - Repulsion Slider & Scoped Group Physics
+## 2026-03-31 - 15:53 - Repulsion Slider & Scoped Group Physics
 
 ### Changed
 
 - Repulsion slider now behaves intuitively — dragging right increases repulsion (was reversed).
 - Scoped tactic groups (Turret Assembly, Base Demolition) repulse external nodes as a single unit; internal nodes retain normal per-node repulsion within the group.
 
-## [2026-03-31 - 15:41] - Graph Visualisation Fixes
+## 2026-03-31 - 15:41 - Graph Visualisation Fixes
 
 ### Fixed
 
@@ -76,7 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Bottom-right "Interactive Behaviour Tree Engine" watermark label.
 
-## [2026-03-31 - 10:45] - Initial Commit
+## 2026-03-31 - 10:45 - Initial Commit
 
 ### Added
 
