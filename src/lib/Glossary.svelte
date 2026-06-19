@@ -9,22 +9,37 @@ const entries = [
 	{
 		id: "root",
 		title: "Glossary: Cognitive Decision Architectures",
-		body: "Modern Game AI must choose between complex planning and instant, reactive scores. The decision architecture defines how an agent transitions from sensing to acting.",
+		body: "This tool layers two real techniques. A fuzzy (or binary) selector chooses WHICH strategy to pursue; a GOAP planner computes HOW to achieve it as an ordered action queue. The graph shows: Strategy Selector → Strategy → Tactical plan (scoped box) → Actions.",
 	},
 	{
-		id: "goap",
-		title: "GOAP: Regressive Search",
-		body: 'Goal-Oriented Action Planning uses A* to search from a goal back to its preconditions. For example, "Target Dead" -> Precondition "Has Ammo" -> Action "Collect Ammo". It allows for emergent problem solving.',
-	},
-	{
-		id: "utility",
-		title: "Utility: Scoring & Weights",
-		body: "Fuzzy logic scoring. Each action (Attack, Heal, Flee) calculates a 0-1 value based on multiple environmental inputs. Weights allow designers to prioritize survival over combat.",
+		id: "binary",
+		title: "Binary Selection",
+		body: "The comparison baseline. Strategies are checked in a fixed priority order against hard thresholds; the first rule that passes wins (e.g. health < 30 → Survive). It cannot express 'how much' a condition holds, so it can flip abruptly and disagree with the fuzzy pick near a threshold.",
 	},
 	{
 		id: "fuzzy",
-		title: "Fuzzy Logic Curves",
-		body: 'Unlike binary "if-then" rules, fuzzy curves provide a gradient. Health <= 20% might have a utility of 1, but 21% is not 0; it might be 0.9. This creates smooth, human-like transitions.',
+		title: "Fuzzy Selection",
+		body: "Each crisp input (health, ammo, enemy distance) is fuzzified by membership functions into degrees in linguistic sets (e.g. Critical / Wounded / Healthy). Rules combine them with fuzzy AND (min); rules voting for the same strategy aggregate with fuzzy OR (max), giving a continuous desirability in [0,1]. The most desirable strategy fires.",
+	},
+	{
+		id: "membership",
+		title: "Membership Function (μ)",
+		body: "A curve mapping a crisp value to a [0,1] degree of membership in a fuzzy set. Here they are triangles and shoulders — e.g. 'enemy Near' is 1 below 25, ramps to 0 by 45. Overlapping sets are what give fuzzy logic its smooth, non-brittle transitions.",
+	},
+	{
+		id: "goap",
+		title: "GOAP: Goal-Oriented Action Planning",
+		body: "The tactical layer. A goal is a target world-state (e.g. enemyDead = true). Each action has preconditions, effects and a cost. A forward A* search explores reachable world-states to find the cheapest action sequence that satisfies the goal — the 'plan' shown as the action queue.",
+	},
+	{
+		id: "astar",
+		title: "Forward A* Planning",
+		body: "From the current world-state, expand each action whose preconditions hold, applying its effects to reach a new state. Nodes are prioritised by f = g + h, where g is cost-so-far and h counts unmet goal facts (an admissible heuristic). The first goal-satisfying state popped is the optimal plan.",
+	},
+	{
+		id: "unreachable",
+		title: "Unreachable Goal",
+		body: "If no chain of satisfiable actions reaches the goal (e.g. Attack needs a loaded weapon, Reload needs ammo, and ammo is empty), the planner returns no plan. The tool surfaces this as 'No valid plan' rather than silently failing — a key advantage of planning over hard-coded branches.",
 	},
 ];
 
@@ -47,7 +62,10 @@ $effect(() => {
 </script>
 
 {#if isOpen}
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="modal-overlay" onclick={handleClose} onkeydown={(e) => e.key === 'Escape' && handleClose()} tabindex="-1">
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="0">
     <aside class="toc">
       <h3>Decision Glossary</h3>

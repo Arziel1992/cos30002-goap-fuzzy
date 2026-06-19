@@ -2,7 +2,7 @@
 import * as d3 from "d3";
 import { onMount, tick, untrack } from "svelte";
 
-let { stats, params, physics, containerRef } = $props();
+let { stats, physics } = $props();
 
 let svg = $state();
 let wrapperDiv = $state();
@@ -40,7 +40,7 @@ $effect(() => {
 			const desc = d3.hierarchy(d.data, (n) => n.children).descendants();
 			const childCount = desc.length - 1; // exclude the parent itself
 			scopedParentChildCounts.set(d.data.id, childCount);
-			desc.slice(1).forEach((c) => scopedChildIds.add(c.data.id));
+			for (const c of desc.slice(1)) scopedChildIds.add(c.data.id);
 		}
 	});
 
@@ -223,8 +223,10 @@ function toggleExpand(nodeData) {
           <text class="node-type" text-anchor="middle" dy="14" fill={node.data.status === 'READY' || node.data.status === 'EVALUATING' ? '#94a3b8' : 'rgba(255,255,255,0.7)'}>
             {node.data.type?.toUpperCase()}
           </text>
-          {#if params.mode === 'fuzzy' && node.data.utility > 0}
-             <text x="75" dy="-10" class="utility-badge">U: {node.data.utility.toFixed(2)}</text>
+          {#if node.data.type === 'strategy'}
+             <text x="75" dy="-10" class="utility-badge">μ {node.data.utility.toFixed(2)}</text>
+          {:else if node.data.type === 'action' && node.data.cost}
+             <text x="75" dy="-10" class="cost-badge">cost {node.data.cost}</text>
           {/if}
         </g>
       {/each}

@@ -9,22 +9,16 @@ let {
 const modes = [
 	{
 		id: "binary",
-		label: "Evaluation: Binary",
+		label: "Selector: Binary",
 		tooltip:
-			"Traditional priority-based execution. Branches are evaluated in a fixed order.",
+			"Priority thresholds. The first rule whose hard condition holds wins — no blending.",
 	},
 	{
 		id: "fuzzy",
-		label: "Evaluation: Fuzzy",
+		label: "Selector: Fuzzy",
 		tooltip:
-			"Utility-based execution. Selector children are re-prioritized based on real-time scores.",
+			"Membership functions blend the inputs into a desirability per strategy; the highest fires.",
 	},
-];
-
-const goals = [
-	{ id: "patrol", label: "Patrol Territory" },
-	{ id: "defense", label: "Defensive Stand" },
-	{ id: "siege", label: "Offensive Siege" },
 ];
 </script>
 
@@ -46,20 +40,8 @@ const goals = [
   </div>
 
   <div class="sim-actions">
-    <button class="tick-btn" onclick={onTick}>Tick AI</button>
-    <button class="reset-btn" onclick={onReset}>Reset State</button>
-  </div>
-
-  <div class="control-group">
-    <label for="goal-select" class="field-label">Active Strategic Goal</label>
-    <div class="select-wrapper">
-      <select id="goal-select" bind:value={params.goal} class="styled-select">
-        {#each goals as g}
-          <option value={g.id}>{g.label}</option>
-        {/each}
-      </select>
-      <div class="select-arrow">▼</div>
-    </div>
+    <button class="tick-btn" onclick={onTick}>Execute Step ▶</button>
+    <button class="reset-btn" onclick={onReset}>Reset Plan</button>
   </div>
 
   <hr class="divider" />
@@ -115,22 +97,6 @@ const goals = [
   }
 
   
-  .field-label { display: block; font-size: 0.7rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.5rem; }
-
-  .select-wrapper { position: relative; width: 100%; }
-  .styled-select {
-    width: 100%; appearance: none; background: #fff; border: 2px solid #e2e8f0;
-    border-radius: 12px; padding: 0.8rem 1rem; padding-right: 2.5rem;
-    font-size: 0.9rem; font-weight: 700; color: #0f172a; cursor: pointer; transition: all 0.2s;
-  }
-  .styled-select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1); }
-  .select-arrow {
-    position: absolute; right: 1rem; top: 50%; transform: translateY(-50%);
-    pointer-events: none; font-size: 0.6rem; color: #94a3b8;
-  }
-
-    
-
   .control-group { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 0.5rem; }
   .label-row { display: flex; justify-content: space-between; font-size: 0.85rem; color: #475569; font-weight: 700; }
   .label-row span { color: var(--accent); font-weight: 800; }

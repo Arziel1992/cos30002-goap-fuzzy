@@ -1,217 +1,319 @@
 /**
- * Behaviour Tree (BT) & Decision Engine - COS30002
- * Expanded Strategy Logic: Healing, Siege, Defense (Turret), Patrol
+ * Cognitive Decision Architecture — COS30002 Module 5
+ *
+ * Two real AI techniques, layered to match the tool's hierarchy:
+ *
+ *   STRATEGY SELECTOR  →  Fuzzy logic. Crisp inputs (health, ammo, enemy
+ *                         distance) are fuzzified through membership functions
+ *                         and combined by rules into a DESIRABILITY for each
+ *                         strategic goal. The highest-firing goal is selected.
+ *
+ *   TACTICAL LAYER     →  GOAP (Goal-Oriented Action Planning). For the chosen
+ *                         goal-state, an A* planner searches the action space
+ *                         (each action has preconditions, effects and a cost)
+ *                         for the cheapest sequence that reaches the goal.
+ *
+ *   SMALL DECISIONS    →  The individual planned actions, executed in order.
+ *
+ * This file is pure logic — no DOM. App.svelte drives it and feeds the result
+ * to the force-directed graph for visualisation.
  */
 
-export const NodeStatus = {
-	READY: "READY",
-	RUNNING: "RUNNING",
-	SUCCESS: "SUCCESS",
-	FAILURE: "FAILURE",
-	EVALUATING: "EVALUATING",
+// ─────────────────────────────────────────────
+// FUZZY LOGIC — membership functions
+// ─────────────────────────────────────────────
+
+/** Left shoulder: 1 at/below a, ramps down to 0 at b. */
+function shoulderL(x, a, b) {
+	if (x <= a) return 1;
+	if (x >= b) return 0;
+	return (b - x) / (b - a);
+}
+
+/** Right shoulder: 0 at/below a, ramps up to 1 at b. */
+function shoulderR(x, a, b) {
+	if (x <= a) return 0;
+	if (x >= b) return 1;
+	return (x - a) / (b - a);
+}
+
+/** Triangular set peaking at b, zero at/outside a and c. */
+function triangle(x, a, b, c) {
+	if (x <= a || x >= c) return 0;
+	return x < b ? (x - b) / (b - a) + 1 : (c - x) / (c - b);
+}
+
+/**
+ * Membership functions per linguistic variable. Inputs are crisp slider values.
+ * health, enemyDist: 0–100. ammo: 0–30 (matches the UI range).
+ */
+export const FUZZY_SETS = {
+	health: {
+		critical: (x) => shoulderL(x, 25, 45),
+		wounded: (x) => triangle(x, 30, 55, 80),
+		healthy: (x) => shoulderR(x, 55, 80),
+	},
+	ammo: {
+		low: (x) => shoulderL(x, 6, 14),
+		medium: (x) => triangle(x, 10, 18, 26),
+		high: (x) => shoulderR(x, 14, 24),
+	},
+	enemyDist: {
+		near: (x) => shoulderL(x, 30, 55),
+		medium: (x) => triangle(x, 35, 60, 85),
+		far: (x) => shoulderR(x, 60, 90),
+	},
 };
 
-export class BTNode {
-	constructor(id, name, type, children = []) {
-		this.id = id;
-		this.name = name;
-		this.type = type; // 'selector', 'sequence', 'action', 'condition'
-		this.children = children;
-		this.status = NodeStatus.READY;
-		this.isExpanded = true;
-		this.isScoped = false;
-		this.utility = 0; // For fuzzy evaluation
-	}
+const fand = Math.min; // fuzzy AND
+const fOr = Math.max; // fuzzy OR / aggregation
+
+/**
+ * Fuzzify the inputs and fire the rule base to produce a desirability (0–1) for
+ * each strategy. Mamdani-style: AND = min, rule aggregation per goal = max.
+ * @param {{health:number, ammo:number, enemyDist:number}} inputs
+ */
+export function evaluateFuzzy(inputs) {
+	const H = FUZZY_SETS.health;
+	const A = FUZZY_SETS.ammo;
+	const E = FUZZY_SETS.enemyDist;
+
+	const m = {
+		health: {
+			critical: H.critical(inputs.health),
+			wounded: H.wounded(inputs.health),
+			healthy: H.healthy(inputs.health),
+		},
+		ammo: {
+			low: A.low(inputs.ammo),
+			medium: A.medium(inputs.ammo),
+			high: A.high(inputs.ammo),
+		},
+		enemyDist: {
+			near: E.near(inputs.enemyDist),
+			medium: E.medium(inputs.enemyDist),
+			far: E.far(inputs.enemyDist),
+		},
+	};
+
+	// Rule base → goal desirabilities.
+	const eliminate = fOr(
+		fand(m.enemyDist.near, m.ammo.high),
+		fand(m.enemyDist.medium, m.ammo.high, m.health.healthy),
+	);
+	const survive = fOr(
+		m.health.critical, // critically hurt → survive, unconditionally
+		fand(m.health.wounded, m.enemyDist.near),
+		fand(m.ammo.low, m.enemyDist.near), // can't fight, disengage
+	);
+	const patrol = fOr(
+		m.enemyDist.far,
+		fand(m.health.healthy, m.enemyDist.medium, m.ammo.medium),
+	);
+
+	return { memberships: m, desirabilities: { eliminate, survive, patrol } };
 }
 
-export class BehaviourTree {
-	constructor() {
-		this.root = this.buildInitialTree();
-	}
+// ─────────────────────────────────────────────
+// GOAP — action set, goals, world state
+// ─────────────────────────────────────────────
 
-	buildInitialTree() {
-		// 1. HEALING STRATEGY
-		const healing = new BTNode("healing", "HEALING STRATEGY", "sequence", [
-			new BTNode("cond_low_hp", "HP < 30%", "condition"),
-			new BTNode("move_medkit", "MOVE TO MED STORAGE", "action"),
-			new BTNode("apply_patch", "APPLY BIOPATCH", "action"),
-		]);
+/**
+ * Action library. Each action has boolean preconditions that must hold in the
+ * world state, effects it applies, and a cost the planner minimises.
+ */
+export const ACTIONS = [
+	{ id: "move", name: "Move To Enemy", cost: 3, pre: {}, eff: { nearEnemy: true } },
+	{ id: "reload", name: "Reload Weapon", cost: 2, pre: { hasAmmo: true }, eff: { weaponLoaded: true } },
+	{ id: "attack", name: "Attack Enemy", cost: 2, pre: { weaponLoaded: true, nearEnemy: true }, eff: { enemyDead: true } },
+	{ id: "cover", name: "Take Cover", cost: 2, pre: {}, eff: { atCover: true } },
+	{ id: "medkit", name: "Grab Medkit", cost: 3, pre: {}, eff: { hasMedkit: true } },
+	{ id: "heal", name: "Apply Medkit", cost: 2, pre: { hasMedkit: true }, eff: { healed: true } },
+	{ id: "patrol", name: "Patrol Route", cost: 1, pre: {}, eff: { patrolled: true } },
+];
 
-		// 2. DEFENSE STRATEGY (Build Turrets - Scoped)
-		const scavenge = new BTNode("scavenge", "SCAVENGE SCRAP", "action");
-		const moveDepot = new BTNode("move_depot", "MOVE TO DEPOT", "action");
-		const construct = new BTNode("construct", "CONSTRUCT TURRET", "action");
+/** Strategic goals = a target world state the GOAP planner must reach. */
+export const STRATEGIES = [
+	{ id: "eliminate", label: "Eliminate Threat", goal: { enemyDead: true } },
+	{ id: "survive", label: "Survive & Recover", goal: { atCover: true, healed: true } },
+	{ id: "patrol", label: "Patrol Sector", goal: { patrolled: true } },
+];
 
-		const turretSubset = new BTNode(
-			"turret_logic",
-			"TURRET ASSEMBLY",
-			"sequence",
-			[scavenge, moveDepot, construct],
-		);
-		turretSubset.isScoped = true;
+const GOAL_STATES = Object.fromEntries(STRATEGIES.map((s) => [s.id, s.goal]));
 
-		const defense = new BTNode("defense", "DEFENSE STRATEGY", "sequence", [
-			new BTNode("cond_defense", "Goal == Defense", "condition"),
-			turretSubset,
-		]);
-
-		// 3. SIEGE STRATEGY (Attack Enemy Base)
-		const infiltrate = new BTNode("infiltrate", "INFILTRATE BASE", "action");
-		const plantCharge = new BTNode("plant", "PLANT EXPLOSIVES", "action");
-		const detonate = new BTNode("detonate", "REMOTE DETONATE", "action");
-
-		const siegeSubset = new BTNode(
-			"siege_logic",
-			"BASE DEMOLITION",
-			"sequence",
-			[infiltrate, plantCharge, detonate],
-		);
-		siegeSubset.isScoped = true;
-
-		const siege = new BTNode("siege", "SIEGE STRATEGY", "sequence", [
-			new BTNode("cond_siege", "Goal == Siege", "condition"),
-			siegeSubset,
-		]);
-
-		// 4. PATROLLING STRATEGY (Default)
-		const reloading = new BTNode("reloading", "RELOAD (LOW AMMO)", "action");
-		const scouting = new BTNode("scouting", "SCOUT AREA", "action");
-		const patrol = new BTNode("patrolling", "PATROLLING STRATEGY", "selector", [
-			reloading,
-			scouting,
-		]);
-
-		// ROOT NODE
-		return new BTNode("root", "GOAL SELECTOR", "selector", [
-			healing,
-			defense,
-			siege,
-			patrol,
-		]);
-	}
-
-	tick(node, params, mode = "binary") {
-		node.status = NodeStatus.EVALUATING;
-
-		if (node.type === "condition") {
-			const result = this.evaluateCondition(node, params);
-			node.status = result ? NodeStatus.SUCCESS : NodeStatus.FAILURE;
-			return node.status;
-		}
-
-		if (node.type === "action") {
-			const result = this.evaluateAction(node, params);
-			node.status = result;
-			return node.status;
-		}
-
-		if (node.type === "selector") {
-			const orderedChildren = [...node.children];
-
-			if (mode === "fuzzy") {
-				// Calculate utility for children and sort
-				orderedChildren.forEach((child) => {
-					child.utility = this.calculateChildUtility(child, params);
-				});
-				orderedChildren.sort((a, b) => b.utility - a.utility);
-			}
-
-			for (const child of orderedChildren) {
-				const res = this.tick(child, params, mode);
-				if (res === NodeStatus.SUCCESS || res === NodeStatus.RUNNING) {
-					node.status = res;
-					this.resetRemaining(
-						node,
-						orderedChildren,
-						orderedChildren.indexOf(child) + 1,
-					);
-					return res;
-				}
-			}
-			node.status = NodeStatus.FAILURE;
-			return NodeStatus.FAILURE;
-		}
-
-		if (node.type === "sequence") {
-			for (const child of node.children) {
-				const res = this.tick(child, params, mode);
-				if (res === NodeStatus.FAILURE || res === NodeStatus.RUNNING) {
-					node.status = res;
-					this.resetRemaining(
-						node,
-						node.children,
-						node.children.indexOf(child) + 1,
-					);
-					return res;
-				}
-			}
-			node.status = NodeStatus.SUCCESS;
-			return NodeStatus.SUCCESS;
-		}
-
-		return NodeStatus.FAILURE;
-	}
-
-	calculateChildUtility(child, params) {
-		const { health, ammo, distEnemy, goal } = params;
-		if (child.id === "healing") return (1 - health / 100) * 1.5; // High priority if low health
-		if (child.id === "defense") return goal === "defense" ? 1.0 : 0.2;
-		if (child.id === "siege") return goal === "siege" ? 1.0 : 0.1;
-		if (child.id === "patrolling") return 0.5; // Baseline
-		return 0;
-	}
-
-	evaluateCondition(node, params) {
-		if (node.id === "cond_low_hp") return params.health < 30;
-		if (node.id === "cond_defense") return params.goal === "defense";
-		if (node.id === "cond_siege") return params.goal === "siege";
-		return true;
-	}
-
-	evaluateAction(node, params) {
-		if (node.id === "reloading")
-			return params.ammo < 5 ? NodeStatus.SUCCESS : NodeStatus.FAILURE;
-		if (node.id === "scouting")
-			return params.distEnemy > 80 ? NodeStatus.SUCCESS : NodeStatus.FAILURE;
-		if (
-			node.id === "move_depot" ||
-			node.id === "move_medkit" ||
-			node.id === "infiltrate"
-		)
-			return NodeStatus.RUNNING;
-		return NodeStatus.SUCCESS;
-	}
-
-	resetRemaining(node, children, startIndex) {
-		for (let i = startIndex; i < children.length; i++) {
-			this.resetNodes(children[i]);
-		}
-	}
-
-	resetNodes(node) {
-		node.status = NodeStatus.READY;
-		if (node.children) node.children.forEach((c) => this.resetNodes(c));
-	}
+/**
+ * BINARY strategy selection — the classic comparison baseline. Fixed priority
+ * order with crisp threshold conditions; the first rule that fires wins. Unlike
+ * the fuzzy layer there is no blending: a value is either over the threshold or
+ * not, so the binary pick can disagree with the fuzzy pick near boundaries.
+ * @param {{health:number, ammo:number, enemyDist:number}} inputs
+ */
+export function selectBinary(inputs) {
+	if (inputs.health < 30) return "survive"; // critically hurt
+	if (inputs.enemyDist < 35 && inputs.ammo > 8) return "eliminate"; // armed & close
+	if (inputs.enemyDist < 35) return "survive"; // close but out of ammo → disengage
+	return "patrol"; // nothing pressing
 }
 
-export class UtilityEngine {
-	calculateScores(params) {
-		const { health, ammo, distEnemy, goal } = params;
+/** Derive the agent's current world facts from the crisp sensor inputs. */
+export function deriveWorldState(inputs) {
+	return {
+		hasAmmo: inputs.ammo > 8,
+		weaponLoaded: false,
+		nearEnemy: inputs.enemyDist < 35,
+		atCover: false,
+		hasMedkit: false,
+		healed: inputs.health > 60,
+		enemyDead: false,
+		patrolled: false,
+	};
+}
 
-		// HEALING
-		const uHealing = (1 - health / 100) ** 2;
-		// DEFENSE
-		const uDefense = goal === "defense" ? 0.9 : 0.2;
-		// SIEGE
-		const uSiege = goal === "siege" ? 0.8 : 0.1;
-		// PATROL
-		const uPatrol = 0.5 + (distEnemy / 100) * 0.3;
+/** Does `state` satisfy every key/value in `goal`? */
+function satisfies(state, goal) {
+	for (const k in goal) if (state[k] !== goal[k]) return false;
+	return true;
+}
 
-		return [
-			{ id: "healing", label: "Healing Strategy", score: uHealing },
-			{ id: "defense", label: "Defense Strategy", score: uDefense },
-			{ id: "siege", label: "Siege Strategy", score: uSiege },
-			{ id: "patrolling", label: "Patrol Strategy", score: uPatrol },
-		].sort((a, b) => b.score - a.score);
+function stateKey(state) {
+	const keys = Object.keys(state).sort();
+	return keys.map((k) => `${k}:${state[k] ? 1 : 0}`).join(",");
+}
+
+/**
+ * Forward A* over world states. Returns the cheapest action sequence whose
+ * cumulative effects satisfy the goal, plus search metadata for the UI.
+ * @returns {{found:boolean, plan:Array, cost:number, explored:number}}
+ */
+export function planGOAP(start, goal, actions = ACTIONS) {
+	const goalKeys = Object.keys(goal);
+	const heuristic = (s) => goalKeys.reduce((n, k) => n + (s[k] !== goal[k] ? 1 : 0), 0);
+
+	const open = [{ state: start, g: 0, f: heuristic(start), plan: [] }];
+	const best = new Map(); // stateKey → cheapest g seen
+	let explored = 0;
+
+	while (open.length > 0) {
+		// Pick the lowest-f node (small search space → linear scan is fine).
+		let bi = 0;
+		for (let i = 1; i < open.length; i++) if (open[i].f < open[bi].f) bi = i;
+		const cur = open.splice(bi, 1)[0];
+		explored++;
+
+		if (satisfies(cur.state, goal)) {
+			return { found: true, plan: cur.plan, cost: cur.g, explored };
+		}
+
+		const key = stateKey(cur.state);
+		if (best.has(key) && best.get(key) <= cur.g) continue;
+		best.set(key, cur.g);
+
+		for (const act of actions) {
+			if (!satisfies(cur.state, act.pre)) continue;
+			const next = { ...cur.state, ...act.eff };
+			if (stateKey(next) === key) continue; // no progress
+			const g = cur.g + act.cost;
+			open.push({ state: next, g, f: g + heuristic(next), plan: [...cur.plan, act] });
+		}
+
+		if (explored > 5000) break; // safety valve
+	}
+
+	return { found: false, plan: [], cost: Number.POSITIVE_INFINITY, explored };
+}
+
+// ─────────────────────────────────────────────
+// DECISION ENGINE — ties the two layers together
+// ─────────────────────────────────────────────
+
+export class DecisionEngine {
+	/**
+	 * Run both layers for the given parameters.
+	 * @param {{mode:string, goal:string, health:number, ammo:number, distEnemy:number}} params
+	 */
+	evaluate(params) {
+		const inputs = {
+			health: params.health,
+			ammo: params.ammo,
+			enemyDist: params.distEnemy,
+		};
+		const fuzzy = evaluateFuzzy(inputs);
+		const world = deriveWorldState(inputs);
+
+		// Tactical layer: plan every strategy so all branches show their GOAP queue.
+		const plans = {};
+		for (const s of STRATEGIES) plans[s.id] = planGOAP(world, GOAL_STATES[s.id], ACTIONS);
+
+		// Strategy selector — compute BOTH methods so the UI can compare them.
+		const binaryChoice = selectBinary(inputs);
+		const fuzzyChoice = STRATEGIES.reduce((best, s) =>
+			fuzzy.desirabilities[s.id] > fuzzy.desirabilities[best.id] ? s : best,
+		).id;
+
+		const chosen = params.mode === "binary" ? binaryChoice : fuzzyChoice;
+
+		return { inputs, fuzzy, world, plans, binaryChoice, fuzzyChoice, chosen };
+	}
+
+	/**
+	 * Build the force-graph hierarchy: root selector → scoped strategy boxes →
+	 * planned action steps. `execStep` lights up executed actions for the chosen
+	 * strategy as the user ticks through the plan.
+	 */
+	buildGraph(result, execStep = 0) {
+		const strategyNodes = STRATEGIES.map((s) => {
+			const plan = result.plans[s.id];
+			const isChosen = s.id === result.chosen;
+
+			let children;
+			if (plan.found && plan.plan.length > 0) {
+				children = plan.plan.map((a, i) => ({
+					id: `${s.id}_${a.id}_${i}`,
+					name: a.name,
+					type: "action",
+					status: isChosen
+						? i < execStep
+							? "SUCCESS"
+							: i === execStep
+								? "RUNNING"
+								: "READY"
+						: "READY",
+					cost: a.cost,
+					utility: 0,
+					children: [],
+					isExpanded: true,
+				}));
+			} else if (plan.found) {
+				children = [
+					{ id: `${s.id}_goalmet`, name: "Goal already met", type: "condition", status: "SUCCESS", utility: 0, children: [], isExpanded: true },
+				];
+			} else {
+				children = [
+					{ id: `${s.id}_noplan`, name: "⊘ No valid plan", type: "condition", status: "FAILURE", utility: 0, children: [], isExpanded: true },
+				];
+			}
+
+			const done = isChosen && plan.found && execStep >= plan.plan.length;
+			return {
+				id: s.id,
+				name: s.label,
+				type: "strategy",
+				isScoped: true,
+				status: isChosen ? (done ? "SUCCESS" : "RUNNING") : plan.found ? "READY" : "FAILURE",
+				utility: result.fuzzy.desirabilities[s.id],
+				children,
+				isExpanded: true,
+			};
+		});
+
+		return {
+			id: "root",
+			name: "STRATEGY SELECTOR",
+			type: "selector",
+			status: "RUNNING",
+			utility: 0,
+			isExpanded: true,
+			children: strategyNodes,
+		};
 	}
 }

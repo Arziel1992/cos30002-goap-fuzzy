@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 2026-06-20 - 05:06
+
+### Changed
+
+- **Replaced the Behaviour-Tree engine with a genuine GOAP + fuzzy architecture.** The tool previously claimed GOAP and fuzzy logic but implemented neither; it was a hand-built behaviour tree with a utility re-sort.
+- Strategy selection is now a real comparison between **binary** (priority thresholds) and **fuzzy** (membership functions + min/max rule aggregation) methods; the panel shows both picks and flags when they disagree.
+- The graph now maps the intended hierarchy onto real logic: Strategy Selector → Strategy → scoped tactical plan → planned actions.
+
+### Added
+
+- **Forward A\* GOAP planner** over world-states (actions with preconditions, effects, cost). The chosen strategy's **action queue** is shown with per-action cost, total plan cost and nodes explored — the real plan the original never surfaced — and steps through on TICK.
+- Unreachable-goal detection: when preconditions can't be met (e.g. no ammo → no reload → no attack), the planner reports "No valid plan".
+- Rewrote Sidebar and Glossary to teach fuzzy membership, binary-vs-fuzzy selection, and forward A\* planning; updated README and removed the duplicate/divergent utility scorer.
 
 ## 2026-06-19 - 23:18
 

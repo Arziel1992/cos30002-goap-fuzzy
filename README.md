@@ -1,25 +1,32 @@
 # Cognitive Decision Architectures (COS30002)
 
-An interactive, pedagogical simulator for visualizing **Goal-Oriented Action Planning (GOAP)** and **Utility-Based AI (Fuzzy Logic)**. This tool demonstrates how modern games (like F.E.A.R. and The Sims) translate environmental variables into complex, human-like behavior.
+An interactive, pedagogical simulator that layers two real Game-AI techniques to match a strategy → tactics → action hierarchy: a **fuzzy (or binary) strategy selector** decides *which* goal to pursue, and a **GOAP planner** computes *how* to achieve it as an ordered action queue. It directly contrasts **binary** threshold decisions with **fuzzy** desirability, and shows the GOAP plan the original tool never surfaced.
 
 ## 🚀 Key Features
 
-- **Svelte 5 + HTML5 Canvas:** High-performance visualization of logical chains and scoring bars.
-- **Two Core Architectures:**
-    - **Mode A: GOAP:** A regressive A* search through action space. Reverses from a Goal (e.g., Target Eliminated) to find the path of least resistance based on current preconditions.
-    - **Mode B: Utility (Fuzzy Logic):** Continuous evaluation of competing behaviors using non-linear curves (Attack vs. Heal vs. Flee).
-- **Interactive Environment:** Sliders for Agent Health, Ammo Count, and Proximity to threats and resources.
-- **Pedagogical Glassmorphism:** Live Decision Cards and Glossary TOC for academic reference.
+- **Binary vs Fuzzy selection (the headline comparison):** the same inputs are run through hard priority thresholds *and* fuzzy membership functions; the panel shows both picks and flags when they disagree near a boundary.
+- **Real fuzzy logic:** crisp Health / Ammo / Enemy-Distance inputs are fuzzified through triangular & shoulder membership functions, combined with fuzzy AND (`min`) / OR (`max`) rules into a continuous desirability per strategy.
+- **Real GOAP planner:** a forward **A\*** search over world-states (actions with preconditions, effects and cost) computes the cheapest action sequence to reach the chosen goal — shown as a live, step-through **action queue** with total cost and nodes explored.
+- **Reachability made visible:** if an action's preconditions can't be met (e.g. no ammo → can't reload → can't attack), the goal is reported as **unreachable** rather than silently failing.
+- **Force-directed graph:** Strategy Selector → Strategy → scoped tactical plan → actions, with desirability (`μ`) and cost badges; TICK executes the plan step by step.
 
 ## 📐 Mathematical Models
 
-### GOAP Cost
-$$TotalCost = \sum ActionCost_i$$
-The planner selects the path with the minimum Total Cost from the goal state back to the current state.
+### Fuzzy desirability
 
-### Utility Scoring (Fuzzy)
-$$Score = \sum (Weight_n \times Curve_n(Variable))$$
-Each action competes; the highest score is selected as the current decision.
+$$
+desire(goal) = \max_{rules}\;\min(\mu_{1}, \mu_{2}, \ldots)
+$$
+
+Each input is mapped to a membership degree $\mu \in [0,1]$ by its membership function. A rule fires at the strength of its weakest input (fuzzy AND = min); all rules voting for a goal aggregate with fuzzy OR (max).
+
+### GOAP forward A\*
+
+$$
+f(state) = g(state) + h(state)
+$$
+
+`g` is the summed cost of actions taken so far; `h` is an admissible heuristic — the count of goal facts still unsatisfied. The first goal-satisfying state expanded yields the optimal (lowest-cost) plan.
 
 ## 💻 Tech Stack
 
