@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 2026-06-22 - 21:49
+
+### Changed
+
+- Replaced the free **force-directed** decision graph with a **static tidy-tree** layout (auto-fitted to view). The old force sim overlapped the scoped boxes, mis-grouped actions, and flung nodes off-screen so plans were never fully visible.
+- Action **cost** is now a styled chip on each node corner (previously unstyled text floating off to the side); strategy **desirability** shows as a μ pill.
+- Removed the obsolete "Physics Engine" controls (repulsion/link/gravity/drift).
+
+### Added
+
+- An on-screen explanation that **μ = fuzzy desirability (0–1)** in the desirability panel.
+
+
 ## 2026-06-20 - 05:06
 
 ### Changed

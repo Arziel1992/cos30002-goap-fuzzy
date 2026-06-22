@@ -1,248 +1,202 @@
 <script>
 import * as d3 from "d3";
-import { onMount, tick, untrack } from "svelte";
 
-let { stats, physics } = $props();
+let { stats } = $props();
 
-let svg = $state();
-let wrapperDiv = $state();
-let width = $state(0);
-let height = $state(0);
-let transform = $state({ x: 0, y: 0, k: 0.8 });
+const NODE_W = 156;
+const NODE_H = 52;
 
-// Force simulation state
-let nodes = $state([]);
-let links = $state([]);
-let simulation;
+// Static "tidy tree" layout (d3.tree). Replaces the old force simulation, which
+// flung nodes off-screen, overlapped the scoped boxes, and mis-grouped actions.
+// The viewBox is fitted to the tree bounds so the WHOLE tree is always visible
+// without any pan/zoom — exactly one clear, stable picture per decision.
+const layout = $derived.by(() => {
+	if (!stats.btRoot) return { nodes: [], links: [], regions: [], vb: "0 0 100 100" };
 
-function handleResize() {
-	if (!wrapperDiv) return;
-	const rect = wrapperDiv.getBoundingClientRect();
-	width = rect.width;
-	height = rect.height;
-}
+	const root = d3.hierarchy(stats.btRoot, (d) => d.children);
+	d3
+		.tree()
+		.nodeSize([NODE_W + 34, 132])
+		.separation((a, b) => (a.parent === b.parent ? 1 : 1.25))(root);
 
-// Effect to update simulation structure
-$effect(() => {
-	if (!stats.btRoot) return;
+	const nodes = root.descendants();
+	const links = root.links();
 
-	const root = d3.hierarchy(stats.btRoot, (d) =>
-		d.isExpanded !== false ? d.children : null,
-	);
-	const d3Nodes = root.descendants();
-	const d3Links = root.links();
+	const xs = nodes.map((n) => n.x);
+	const ys = nodes.map((n) => n.y);
+	const minX = Math.min(...xs);
+	const maxX = Math.max(...xs);
+	const minY = Math.min(...ys);
+	const maxY = Math.max(...ys);
+	const padX = NODE_W / 2 + 36;
+	const padTop = NODE_H / 2 + 34;
+	const padBot = NODE_H / 2 + 40;
+	const vb = `${minX - padX} ${minY - padTop} ${maxX - minX + padX * 2} ${maxY - minY + padTop + padBot}`;
 
-	// Collect IDs of nodes that are direct children of scoped parents
-	const scopedChildIds = new Set();
-	const scopedParentChildCounts = new Map();
-	d3Nodes.forEach((d) => {
-		if (d.data.isScoped) {
-			const desc = d3.hierarchy(d.data, (n) => n.children).descendants();
-			const childCount = desc.length - 1; // exclude the parent itself
-			scopedParentChildCounts.set(d.data.id, childCount);
-			for (const c of desc.slice(1)) scopedChildIds.add(c.data.id);
-		}
-	});
-
-	const forceNodes = d3Nodes.map((d) => {
-		const existing = untrack(() => nodes.find((n) => n.id === d.data.id));
-		return {
-			id: d.data.id,
-			data: d.data,
-			depth: d.depth,
-			isScopedChild: scopedChildIds.has(d.data.id),
-			scopedGroupSize: scopedParentChildCounts.get(d.data.id) || 0,
-			x: existing?.x || (Math.random() - 0.5) * 200,
-			y: existing?.y || d.depth * 200,
-		};
-	});
-
-	const forceLinks = d3Links.map((l) => ({
-		source: forceNodes.find((n) => n.id === l.source.data.id),
-		target: forceNodes.find((n) => n.id === l.target.data.id),
-	}));
-
-	nodes = forceNodes;
-	links = forceLinks;
-
-	if (simulation) simulation.stop();
-
-	simulation = d3
-		.forceSimulation(forceNodes)
-		.force(
-			"link",
-			d3.forceLink(forceLinks).distance(physics.linkDist).strength(1),
-		)
-		.force(
-			"charge",
-			d3.forceManyBody().strength((d) => {
-				if (d.isScopedChild) return -physics.repulsion * 0.1;
-				if (d.scopedGroupSize > 0)
-					return -physics.repulsion * (1 + d.scopedGroupSize);
-				return -physics.repulsion;
-			}),
-		)
-		.force("collide", d3.forceCollide(90))
-		.force("x", d3.forceX(0).strength(physics.gravity))
-		.force(
-			"y",
-			d3.forceY((d) => d.depth * 200).strength(physics.drift ? 0.05 : 2),
-		)
-		.on("tick", () => {
-			nodes = [...forceNodes];
-			links = [...forceLinks];
+	// One scoped "tactical boundary" box per strategy subtree. With a static
+	// layout these never overlap and always wrap the right children.
+	const regions = nodes
+		.filter((n) => n.data.isScoped)
+		.map((sn) => {
+			const sub = sn.descendants();
+			const x0 = Math.min(...sub.map((d) => d.x)) - NODE_W / 2 - 14;
+			const x1 = Math.max(...sub.map((d) => d.x)) + NODE_W / 2 + 14;
+			// Extra top room so the strategy node's μ pill clears the box label.
+			const y0 = Math.min(...sub.map((d) => d.y)) - NODE_H / 2 - 54;
+			const y1 = Math.max(...sub.map((d) => d.y)) + NODE_H / 2 + 16;
+			return { id: sn.data.id, x: x0, y: y0, w: x1 - x0, h: y1 - y0, label: sn.data.name };
 		});
 
-	simulation.alpha(1).restart();
+	return { nodes, links, regions, vb };
 });
 
-// Reactive adjustment of forces without restarting the whole structure
-$effect(() => {
-	if (!simulation) return;
-	simulation.force("charge").strength((d) => {
-		if (d.isScopedChild) return -physics.repulsion * 0.1;
-		if (d.scopedGroupSize > 0)
-			return -physics.repulsion * (1 + d.scopedGroupSize);
-		return -physics.repulsion;
-	});
-	simulation.force("link").distance(physics.linkDist);
-	simulation.force("x").strength(physics.gravity);
-	simulation.force(
-		"y",
-		d3.forceY((d) => d.depth * 200).strength(physics.drift ? 0.05 : 2),
-	);
-	simulation.alpha(0.3).restart();
-});
+const FILL = {
+	SUCCESS: "#22c55e",
+	FAILURE: "#ef4444",
+	RUNNING: "#3b82f6",
+	EVALUATING: "#eab308",
+	READY: "#e2e8f0",
+};
+const fillFor = (s) => FILL[s] ?? "#e2e8f0";
+const isLight = (s) => s === "READY" || s === "EVALUATING";
+const inkFor = (s) => (isLight(s) ? "#475569" : "#ffffff");
+const subInkFor = (s) => (isLight(s) ? "#94a3b8" : "rgba(255,255,255,0.72)");
 
-let scopedRegions = $derived.by(() => {
-	const regions = [];
-	const scopedNodes = nodes.filter((n) => n.data.isScoped);
-
-	scopedNodes.forEach((sn) => {
-		const subRoot = d3.hierarchy(sn.data, (d) => d.children);
-		const subIds = subRoot.descendants().map((d) => d.data.id);
-		const subNodes = nodes.filter((n) => subIds.includes(n.id));
-
-		if (subNodes.length > 0) {
-			const minX = Math.min(...subNodes.map((n) => n.x)) - 80;
-			const maxX = Math.max(...subNodes.map((n) => n.x)) + 80;
-			const minY = Math.min(...subNodes.map((n) => n.y)) - 50;
-			const maxY = Math.max(...subNodes.map((n) => n.y)) + 70;
-			regions.push({
-				id: sn.id,
-				x: minX,
-				y: minY,
-				w: maxX - minX,
-				h: maxY - minY,
-				label: sn.data.name,
-			});
-		}
-	});
-	return regions;
-});
-
-onMount(() => {
-	const d3Zoom = d3
-		.zoom()
-		.scaleExtent([0.1, 4])
-		.on("zoom", (event) => {
-			transform = event.transform;
-		});
-	d3.select(svg).call(d3Zoom);
-	const resizeObserver = new ResizeObserver(() => handleResize());
-	resizeObserver.observe(wrapperDiv);
-	handleResize();
-	return () => {
-		resizeObserver.disconnect();
-		if (simulation) simulation.stop();
-	};
-});
-
-function getStatusColor(status) {
-	switch (status) {
-		case "SUCCESS":
-			return "#22c55e";
-		case "FAILURE":
-			return "#ef4444";
-		case "RUNNING":
-			return "#3b82f6";
-		case "EVALUATING":
-			return "#eab308";
-		default:
-			return "#94a3b8";
-	}
-}
-
-function toggleExpand(nodeData) {
-	nodeData.isExpanded = !nodeData.isExpanded;
-	stats.btRoot = { ...stats.btRoot };
+function linkPath(l) {
+	const sx = l.source.x;
+	const sy = l.source.y + NODE_H / 2;
+	const tx = l.target.x;
+	const ty = l.target.y - NODE_H / 2;
+	const my = (sy + ty) / 2;
+	return `M${sx},${sy} C${sx},${my} ${tx},${my} ${tx},${ty}`;
 }
 </script>
 
-<div class="canvas-wrapper" bind:this={wrapperDiv}>
-  <svg bind:this={svg} class="bt-svg">
-    <g transform="translate({width/2 + transform.x}, {100 + transform.y}) scale({transform.k})">
-      <!-- Scoped Borders -->
-      {#each scopedRegions as r}
-        <g class="scoped-region">
-          <rect x={r.x} y={r.y} width={r.w} height={r.h} rx="20" fill="rgba(37, 99, 235, 0.04)" stroke="#2563eb" stroke-width="2" stroke-dasharray="8,4" />
-          <text x={r.x + 20} y={r.y + 25} class="scoped-label">{r.label}</text>
-        </g>
-      {/each}
+<div class="tree-wrap">
+	<svg class="tree" viewBox={layout.vb} preserveAspectRatio="xMidYMid meet" role="img" aria-label="Decision tree">
+		<!-- Scoped tactical boundaries -->
+		{#each layout.regions as r (r.id)}
+			<g class="region">
+				<rect x={r.x} y={r.y} width={r.w} height={r.h} rx="16" />
+				<text class="region-label" x={r.x + 14} y={r.y + 22}>{r.label}</text>
+			</g>
+		{/each}
 
-      <!-- Links -->
-      {#each links as link}
-        <path class="link" 
-          d="M{link.source.x},{link.source.y}C{link.source.x},{(link.source.y + link.target.y)/2} {link.target.x},{(link.source.y + link.target.y)/2} {link.target.x},{link.target.y}"
-          fill="none" 
-          stroke={link.target.data.status === 'READY' ? '#cbd5e1' : getStatusColor(link.target.data.status)} 
-          stroke-width="3" 
-        />
-      {/each}
+		<!-- Links -->
+		{#each layout.links as l (l.target.data.id)}
+			<path
+				class="link"
+				d={linkPath(l)}
+				stroke={l.target.data.status === "READY" ? "#cbd5e1" : fillFor(l.target.data.status)}
+			/>
+		{/each}
 
-      <!-- Nodes -->
-      {#each nodes as node}
-        <g 
-          class="node-group" 
-          transform="translate({node.x}, {node.y})" 
-          onclick={() => node.data.children?.length > 0 && toggleExpand(node.data)}
-          onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && node.data.children?.length > 0 && toggleExpand(node.data)}
-          role="button"
-          tabindex="0"
-          aria-label="Toggle {node.data.name} expansion"
-        >
-          <rect width="140" height="54" x="-70" y="-27" rx="10" 
-            fill={getStatusColor(node.data.status)} 
-            stroke={node.data.status === 'EVALUATING' ? '#eab308' : '#fff'}
-            stroke-width={node.data.status === 'EVALUATING' ? 4 : 2}
-            class="node-rect" 
-          />
-          <text class="node-label" text-anchor="middle" dy="-4" fill={node.data.status === 'READY' || node.data.status === 'EVALUATING' ? '#475569' : '#fff'}>
-            {node.data.name}
-          </text>
-          <text class="node-type" text-anchor="middle" dy="14" fill={node.data.status === 'READY' || node.data.status === 'EVALUATING' ? '#94a3b8' : 'rgba(255,255,255,0.7)'}>
-            {node.data.type?.toUpperCase()}
-          </text>
-          {#if node.data.type === 'strategy'}
-             <text x="75" dy="-10" class="utility-badge">μ {node.data.utility.toFixed(2)}</text>
-          {:else if node.data.type === 'action' && node.data.cost}
-             <text x="75" dy="-10" class="cost-badge">cost {node.data.cost}</text>
-          {/if}
-        </g>
-      {/each}
-    </g>
-  </svg>
+		<!-- Nodes -->
+		{#each layout.nodes as n (n.data.id)}
+			<g class="node" style="transform: translate({n.x}px, {n.y}px);">
+				<rect
+					class="node-rect"
+					x={-NODE_W / 2}
+					y={-NODE_H / 2}
+					width={NODE_W}
+					height={NODE_H}
+					rx="11"
+					fill={fillFor(n.data.status)}
+					stroke={n.data.status === "RUNNING" ? "#1d4ed8" : "#ffffff"}
+					stroke-width={n.data.status === "RUNNING" ? 3 : 2}
+				/>
+				<text class="node-name" text-anchor="middle" dy="-1" fill={inkFor(n.data.status)}>{n.data.name}</text>
+				<text class="node-type" text-anchor="middle" dy="13" fill={subInkFor(n.data.status)}>{n.data.type?.toUpperCase()}</text>
+
+				{#if n.data.type === "strategy"}
+					<g class="badge-mu" transform="translate(0, {-NODE_H / 2 - 13})">
+						<rect x="-30" y="-11" width="60" height="20" rx="10" />
+						<text text-anchor="middle" dy="0.32em">μ {n.data.utility.toFixed(2)}</text>
+					</g>
+				{:else if n.data.type === "action" && n.data.cost}
+					<g class="badge-cost" transform="translate({NODE_W / 2 - 6}, {-NODE_H / 2 + 6})">
+						<circle r="11" />
+						<text text-anchor="middle" dy="0.32em">{n.data.cost}</text>
+					</g>
+				{/if}
+			</g>
+		{/each}
+	</svg>
 </div>
 
 <style>
-  .canvas-wrapper { width: 100%; height: 100%; position: relative; overflow: hidden; background: #f8fafc; }
-  .bt-svg { width: 100%; height: 100%; display: block; cursor: grab; }
-  .scoped-label { font-size: 8px; font-weight: 900; fill: var(--accent); text-transform: uppercase; letter-spacing: 1px; }
-  .node-group { cursor: pointer; border: none; outline: none; }
-  .node-group:focus-visible .node-rect { stroke: var(--accent); stroke-width: 4; }
-  .node-label { font-weight: 800; font-size: 10px; pointer-events: none; }
-  .node-type { font-weight: 600; font-size: 7px; opacity: 0.8; pointer-events: none; }
-  .node-rect { transition: fill 0.3s ease; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.05)); }
-  .link { transition: stroke 0.4s ease; stroke-linejoin: round; }
-  .utility-badge { font-size: 8px; font-weight: 900; fill: #6366f1; }
+	.tree-wrap {
+		width: 100%;
+		height: 100%;
+		display: flex;
+		background: #f8fafc;
+	}
+	.tree {
+		width: 100%;
+		height: 100%;
+		display: block;
+	}
+
+	.region rect {
+		fill: rgba(37, 99, 235, 0.04);
+		stroke: #2563eb;
+		stroke-width: 2;
+		stroke-dasharray: 8 4;
+	}
+	.region-label {
+		font-size: 11px;
+		font-weight: 900;
+		fill: var(--accent);
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+	}
+
+	.link {
+		fill: none;
+		stroke-width: 3;
+		transition: stroke 0.4s ease;
+	}
+
+	.node {
+		transition: transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+	}
+	.node-rect {
+		filter: drop-shadow(0 4px 8px rgba(15, 23, 42, 0.08));
+		transition: fill 0.3s ease, stroke 0.3s ease;
+	}
+	.node-name {
+		font-size: 12.5px;
+		font-weight: 800;
+		pointer-events: none;
+	}
+	.node-type {
+		font-size: 8px;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		pointer-events: none;
+	}
+
+	/* μ desirability pill above each strategy */
+	.badge-mu rect {
+		fill: #eef2ff;
+		stroke: #c7d2fe;
+		stroke-width: 1;
+	}
+	.badge-mu text {
+		font-size: 11px;
+		font-weight: 800;
+		fill: #4f46e5;
+	}
+
+	/* cost chip on the corner of each action */
+	.badge-cost circle {
+		fill: #0f172a;
+		stroke: #fff;
+		stroke-width: 1.5;
+	}
+	.badge-cost text {
+		font-size: 11px;
+		font-weight: 800;
+		fill: #fff;
+	}
 </style>

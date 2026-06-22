@@ -15,13 +15,6 @@ let params = $state({
 	distEnemy: 30,
 });
 
-let physics = $state({
-	repulsion: 3500,
-	linkDist: 180,
-	drift: false,
-	gravity: 0.1,
-});
-
 // Execution pointer for the chosen strategy's GOAP plan (advanced by TICK).
 let execStep = $state(0);
 
@@ -43,7 +36,6 @@ let stats = $state({
 	binaryWinner: null,
 });
 
-let containerRef = $state();
 
 let leftOpen = $state(true);
 let rightOpen = $state(true);
@@ -99,7 +91,7 @@ const labelFor = (id) => STRATEGIES.find((s) => s.id === id)?.label ?? "—";
   </aside>
   {/if}
 
-  <section class="canvas-panel" bind:this={containerRef}>
+  <section class="canvas-panel">
     <button class="toggle-btn toggle-left" onclick={() => leftOpen = !leftOpen} aria-label="Toggle left sidebar">
       {leftOpen ? '◀' : '▶'}
     </button>
@@ -107,7 +99,7 @@ const labelFor = (id) => STRATEGIES.find((s) => s.id === id)?.label ?? "—";
       {rightOpen ? '▶' : '◀'}
     </button>
 
-    <Canvas {stats} {params} {physics} {containerRef} />
+    <Canvas {stats} />
   </section>
 
   {#if rightOpen}
@@ -119,36 +111,6 @@ const labelFor = (id) => STRATEGIES.find((s) => s.id === id)?.label ?? "—";
         onReset={resetTrees}
         onGlossary={openGlossary}
       />
-
-      <hr />
-
-      <!-- Physics Engine -->
-      <div class="panel-section">
-        <div class="panel-header">
-          <span class="panel-label">Physics Engine</span>
-        </div>
-        <div class="panel-body">
-          <div class="p-row">
-            <label for="repulsion">Repulsion</label>
-            <input id="repulsion" type="range" min="500" max="4000" step="100" bind:value={physics.repulsion} />
-          </div>
-          <div class="p-row">
-            <label for="linkDist">Link Dist</label>
-            <input id="linkDist" type="range" min="50" max="400" step="10" bind:value={physics.linkDist} />
-          </div>
-          <div class="p-row">
-            <label for="gravity">Gravity</label>
-            <input id="gravity" type="range" min="0" max="1" step="0.05" bind:value={physics.gravity} />
-          </div>
-          <hr class="mini-divider" />
-          <div class="p-toggle">
-            <span class="toggle-label">Movement: <b>{physics.drift ? 'DRIFT' : 'FIXED'}</b></span>
-            <button class="drift-btn" class:active={physics.drift} onclick={() => physics.drift = !physics.drift}>
-              {physics.drift ? 'Unbound' : 'Hierarchical'}
-            </button>
-          </div>
-        </div>
-      </div>
 
       <hr />
 
@@ -179,7 +141,8 @@ const labelFor = (id) => STRATEGIES.find((s) => s.id === id)?.label ?? "—";
 
         <div class="score-comparison">
           <div class="mode-score full-scores">
-            <span class="score-label">Fuzzy Strategy Desirability:</span>
+            <span class="score-label">Fuzzy Desirability (μ)</span>
+            <p class="mu-note">μ = each strategy's fuzzy desirability (0–1), from the membership functions. Shown on the strategy nodes too.</p>
             {#each stats.utilityScores as s}
               <div class="u-row">
                 <span class="u-name">{s.label}</span>
@@ -274,20 +237,6 @@ const labelFor = (id) => STRATEGIES.find((s) => s.id === id)?.label ?? "—";
     font-size: 0.7rem; font-weight: 800; color: var(--text-secondary);
     text-transform: uppercase; letter-spacing: 0.5px;
   }
-  .panel-body { display: flex; flex-direction: column; gap: 0.8rem; }
-
-  .p-row { display: flex; flex-direction: column; gap: 0.2rem; }
-  .p-row label { font-size: 0.6rem; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; opacity: 0.7; }
-  .p-row input { width: 100%; cursor: pointer; height: 4px; accent-color: var(--accent); }
-
-  .p-toggle { display: flex; flex-direction: column; gap: 0.5rem; }
-  .toggle-label { font-size: 0.65rem; color: var(--text-secondary); }
-  .drift-btn {
-    background: #e2e8f0; border: none; border-radius: 8px; padding: 0.4rem;
-    font-size: 0.7rem; font-weight: 800; cursor: pointer; transition: all 0.2s;
-  }
-  .drift-btn.active { background: var(--accent); color: white; }
-
   .mini-tick-btn {
     background: var(--accent); color: white; border: none; border-radius: 8px;
     padding: 0.4rem 0.8rem; font-size: 0.65rem; font-weight: 800; cursor: pointer;
@@ -305,6 +254,7 @@ const labelFor = (id) => STRATEGIES.find((s) => s.id === id)?.label ?? "—";
   .u-val { min-width: 35px; font-variant-numeric: tabular-nums; color: var(--accent); }
 
   .score-label { font-size: 0.65rem; color: var(--text-secondary); font-weight: 700; opacity: 0.8; text-transform: uppercase; margin-bottom: 0.2rem; }
+  .mu-note { font-size: 0.62rem; line-height: 1.35; color: var(--text-secondary); opacity: 0.85; margin: 0 0 0.5rem; font-style: italic; }
 
   /* Binary vs fuzzy strategy pick comparison */
   .pick-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin: 0.4rem 0; }
